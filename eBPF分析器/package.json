@@ -1,0 +1,14 @@
+{
+  "name": "ebpf-analyzer",
+  "version": "1.0.0",
+  "description": "eBPF 分析器 - 基于 BCC (BPF Compiler Collection) 的内核追踪工具 Web UI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  },
+  "keywords": ["ebpf", "bcc", "bpf", "linux", "tracing", "performance"],
+  "license": "MIT"
+}

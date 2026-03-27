@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐝 eBPF 分析器 - 基于 BCC</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐝</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e4e4e7;--text-dim:#a1a1aa;--text-muted:#52525b;--accent:#06b6d4;--radius:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.container{max-width:1200px;margin:0 auto}
+.cat-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.cat-tab{padding:6px 14px;border-radius:9px;border:none;background:transparent;color:var(--text-dim);font-size:11px;cursor:pointer;transition:all .2s;font-family:inherit;font-weight:500}
+.cat-tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.cat-tab.active{background:rgba(6,182,212,.12);color:var(--accent)}
+.tool-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:all .15s;font-size:12px;color:var(--text-dim)}
+.tool-item:hover{background:rgba(255,255,255,.03)}
+.tool-item.active{background:rgba(6,182,212,.08);color:var(--accent)}
+.tool-item .tool-name{font-weight:600}
+.tool-item .tool-brief{font-size:10px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-run{padding:8px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;transition:opacity .2s}
+.btn-run:hover{opacity:.9}
+.btn-run:disabled{opacity:.5;cursor:not-allowed}
+.btn-stop{padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit;font-size:13px;display:none}
+.tag{font-size:10px;padding:2px 8px;border-radius:10px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
+    <span style="font-size:42px">🐝</span>
+    <div style="flex:1">
+      <h1 style="font-size:22px;margin:0;color:#06b6d4">eBPF 分析器</h1>
+      <p style="font-size:13px;color:var(--text-dim);margin:4px 0 0">基于 BCC (BPF Compiler Collection) · 内核级动态追踪 · 零开销观测</p>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:var(--text-muted)">BCC Tools</div>
+      <a href="https://github.com/iovisor/bcc" target="_blank" style="font-size:10px;color:#06b6d4;text-decoration:none">github.com/iovisor/bcc ↗</a>
+    </div>
+  </div>
+
+  <!-- Category Tabs -->
+  <div class="cat-tabs" id="ebpf-categories">
+    <button class="cat-tab active" onclick="selectCat(this,'cpu')">⚡ CPU & 调度</button>
+    <button class="cat-tab" onclick="selectCat(this,'mem')">🧠 内存</button>
+    <button class="cat-tab" onclick="selectCat(this,'disk')">💾 磁盘 I/O</button>
+    <button class="cat-tab" onclick="selectCat(this,'fs')">📂 文件系统</button>
+    <button class="cat-tab" onclick="selectCat(this,'net')">🌐 网络</button>
+    <button class="cat-tab" onclick="selectCat(this,'sec')">🛡️ 安全审计</button>
+    <button class="cat-tab" onclick="selectCat(this,'app')">🔧 应用层</button>
+  </div>
+
+  <!-- Main Layout -->
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
+    <!-- Left: Tool List -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      <div style="padding:10px 14px;background:rgba(6,182,212,.06);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:#06b6d4" id="cat-title">⚡ CPU & 调度</div>
+      <div id="tool-list" style="max-height:450px;overflow-y:auto"></div>
+    </div>
+
+    <!-- Right: Detail + Run -->
+    <div>
+      <!-- Tool Info Card -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <h3 style="font-size:16px;color:var(--text);margin:0" id="tool-name">execsnoop</h3>
+            <p style="font-size:12px;color:var(--text-dim);margin:6px 0 0;line-height:1.6" id="tool-desc">Trace new processes via exec() syscalls.</p>
+          </div>
+          <a id="tool-link" href="#" target="_blank" style="font-size:10px;color:#06b6d4;text-decoration:none;white-space:nowrap;border:1px solid rgba(6,182,212,.3);padding:3px 8px;border-radius:12px">源码 ↗</a>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <span class="tag" style="background:rgba(6,182,212,.1);color:#06b6d4;border:1px solid rgba(6,182,212,.15)" id="tool-type">tracepoint</span>
+          <span class="tag" id="tool-overhead" style="background:rgba(16,185,129,.1);color:#10b981;border:1px solid rgba(16,185,129,.15)">低开销</span>
+        </div>
+      </div>
+
+      <!-- Run Controls -->
+      <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center">
+        <button class="btn-run" onclick="runProbe()" id="run-btn">▶ 运行</button>
+        <button class="btn-stop" onclick="stopProbe()" id="stop-btn">⏹ 停止</button>
+        <select id="duration" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none">
+          <option value="3">3秒</option>
+          <option value="5" selected>5秒</option>
+          <option value="10">10秒</option>
+          <option value="30">30秒</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-muted)" id="status">就绪</span>
+      </div>
+
+      <!-- Terminal Output -->
+      <div style="background:#0a0a12;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:rgba(6,182,212,.06);border-bottom:1px solid var(--border)">
+          <span style="font-size:12px;color:#06b6d4;font-weight:600">📟 Output</span>
+          <span style="font-size:10px;color:var(--text-muted)" id="output-meta"></span>
+        </div>
+        <pre id="output" style="margin:0;padding:14px;font-family:'Fira Code','SF Mono','Cascadia Code',Consolas,monospace;font-size:11.5px;line-height:1.6;color:#a8e6cf;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all">选择工具后点击「运行」开始追踪...</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// BCC Tools Taxonomy - based on iovisor/bcc
+const tools = {
+  cpu: {
+    title: '⚡ CPU & 调度',
+    tools: [
+      {id:'execsnoop',name:'execsnoop',desc:'Trace new processes via exec() syscalls. 追踪所有新进程的创建，显示PID、父进程、命令行。',type:'tracepoint',overhead:'低'},
+      {id:'exitsnoop',name:'exitsnoop',desc:'Trace process termination (exit and fatal signals). 追踪进程退出和致命信号。',type:'tracepoint',overhead:'低'},
+      {id:'runqlat',name:'runqlat',desc:'Run queue latency as a histogram. CPU运行队列等待延迟分布，判断CPU是否过载。',type:'kprobe',overhead:'中'},
+      {id:'cpudist',name:'cpudist',desc:'On/off-CPU time per task as histogram. 每个任务的CPU使用/等待时间分布。',type:'kprobe',overhead:'中'},
+      {id:'softirqs',name:'softirqs',desc:'Measure soft IRQ event time. 测量软中断处理耗时。',type:'tracepoint',overhead:'低'},
+      {id:'hardirqs',name:'hardirqs',desc:'Measure hard IRQ event time. 测量硬中断处理耗时。',type:'tracepoint',overhead:'低'},
+      {id:'pidpersec',name:'pidpersec',desc:'Count new processes (via fork) per second. 每秒新进程创建数。',type:'tracepoint',overhead:'低'},
+      {id:'syscount',name:'syscount',desc:'Summarize syscall counts and latencies. 系统调用计数与延迟统计。',type:'tracepoint',overhead:'中'}
+    ]
+  },
+  mem: {
+    title: '🧠 内存',
+    tools: [
+      {id:'memleak',name:'memleak',desc:'Display outstanding memory allocations to find leaks. 检测未释放的内存分配，定位内存泄漏。',type:'kprobe',overhead:'高'},
+      {id:'oomkill',name:'oomkill',desc:'Trace the out-of-memory (OOM) killer. 追踪OOM Killer触发事件。',type:'tracepoint',overhead:'低'},
+      {id:'slabratetop',name:'slabratetop',desc:'Kernel SLAB/SLUB memory cache allocation rate top. 内核缓存分配速率排行。',type:'kprobe',overhead:'中'},
+      {id:'cachestat',name:'cachestat',desc:'Page cache hit/miss statistics. 页缓存命中/未命中率统计。',type:'kprobe',overhead:'中'},
+      {id:'drsnoop',name:'drsnoop',desc:'Trace direct reclaim events. 追踪直接内存回收事件。',type:'tracepoint',overhead:'低'}
+    ]
+  },
+  disk: {
+    title: '💾 磁盘 I/O',
+    tools: [
+      {id:'biolatency',name:'biolatency',desc:'Block I/O latency as a histogram. 块设备I/O延迟分布直方图。',type:'tracepoint',overhead:'低'},
+      {id:'biosnoop',name:'biosnoop',desc:'Trace block device I/O with details. 追踪每个块I/O事件的详细信息。',type:'tracepoint',overhead:'中'},
+      {id:'biotop',name:'biotop',desc:'Block device I/O top (like top for disks). 磁盘I/O排行榜。',type:'kprobe',overhead:'中'},
+      {id:'bitesize',name:'bitesize',desc:'I/O size histogram by process. 按进程统计I/O大小分布。',type:'tracepoint',overhead:'低'}
+    ]
+  },
+  fs: {
+    title: '📂 文件系统',
+    tools: [
+      {id:'opensnoop',name:'opensnoop',desc:'Trace open() syscalls. 追踪所有文件打开操作。',type:'tracepoint',overhead:'低'},
+      {id:'statsnoop',name:'statsnoop',desc:'Trace stat() syscalls. 追踪文件状态查询。',type:'tracepoint',overhead:'低'},
+      {id:'filelife',name:'filelife',desc:'Trace file creation and deletion. 追踪文件生命周期（创建到删除）。',type:'kprobe',overhead:'低'},
+      {id:'fileslower',name:'fileslower',desc:'Trace slow synchronous file operations. 追踪慢文件操作。',type:'kprobe',overhead:'低'},
+      {id:'vfscount',name:'vfscount',desc:'Count VFS calls. 统计VFS层函数调用次数。',type:'kprobe',overhead:'中'}
+    ]
+  },
+  net: {
+    title: '🌐 网络',
+    tools: [
+      {id:'tcpconnect',name:'tcpconnect',desc:'Trace TCP active connections (connect). 追踪所有出站TCP连接。',type:'kprobe',overhead:'低'},
+      {id:'tcpaccept',name:'tcpaccept',desc:'Trace TCP passive connections (accept). 追踪所有入站TCP连接。',type:'kprobe',overhead:'低'},
+      {id:'tcpretrans',name:'tcpretrans',desc:'Trace TCP retransmissions. 追踪TCP重传，网络质量关键指标。',type:'tracepoint',overhead:'低'},
+      {id:'tcplife',name:'tcplife',desc:'Trace TCP session lifetimes with details. TCP连接生命周期追踪。',type:'kprobe',overhead:'低'},
+      {id:'tcptop',name:'tcptop',desc:'TCP throughput by host and port. TCP吞吐排行（类似top）。',type:'kprobe',overhead:'中'}
+    ]
+  },
+  sec: {
+    title: '🛡️ 安全审计',
+    tools: [
+      {id:'capable',name:'capable',desc:'Trace security capability checks. 追踪Linux capability权限检查。',type:'kprobe',overhead:'低'},
+      {id:'bashreadline',name:'bashreadline',desc:'Print entered bash commands system wide. 审计全系统bash命令输入。',type:'uretprobe',overhead:'低'},
+      {id:'killsnoop',name:'killsnoop',desc:'Trace kill() signals. 追踪进程间发送的信号。',type:'tracepoint',overhead:'低'},
+      {id:'ttysnoop',name:'ttysnoop',desc:'Watch live output from a tty device. 监控TTY设备实时输出。',type:'kprobe',overhead:'中'}
+    ]
+  },
+  app: {
+    title: '🔧 应用层',
+    tools: [
+      {id:'funccount',name:'funccount',desc:'Count kernel function calls. 内核函数调用计数。',type:'kprobe',overhead:'中'},
+      {id:'funclatency',name:'funclatency',desc:'Time functions and show latency distribution. 函数耗时分布直方图。',type:'kprobe',overhead:'中'},
+      {id:'stackcount',name:'stackcount',desc:'Count function calls with stack traces. 带调用栈的函数计数。',type:'kprobe',overhead:'高'},
+      {id:'trace',name:'trace',desc:'Trace arbitrary functions with filters. 追踪任意函数，支持过滤条件。',type:'kprobe',overhead:'中'},
+      {id:'argdist',name:'argdist',desc:'Display function parameter values as histogram. 函数参数值分布统计。',type:'kprobe',overhead:'中'}
+    ]
+  }
+};
+
+let currentCat = 'cpu', currentTool = 'execsnoop', running = false;
+
+function selectCat(btn, cat) {
+  document.querySelectorAll('.cat-tab').forEach(e => e.classList.remove('active'));
+  btn.classList.add('active');
+  currentCat = cat;
+  const catData = tools[cat];
+  document.getElementById('cat-title').textContent = catData.title;
+  const list = document.getElementById('tool-list');
+  list.innerHTML = catData.tools.map((t, i) =>
+    `<div class="tool-item${i===0?' active':''}" onclick="selectTool(this,'${t.id}')">
+      <div class="tool-name">${t.name}</div>
+      <div class="tool-brief">${t.desc.split('.')[0]}</div>
+    </div>`
+  ).join('');
+  selectTool(list.firstElementChild, catData.tools[0].id);
+}
+
+function selectTool(el, id) {
+  document.querySelectorAll('.tool-item').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+  currentTool = id;
+  let t = null;
+  for (const cat of Object.values(tools)) {
+    t = cat.tools.find(x => x.id === id);
+    if (t) break;
+  }
+  if (!t) return;
+  document.getElementById('tool-name').textContent = t.name;
+  document.getElementById('tool-desc').textContent = t.desc;
+  document.getElementById('tool-link').href = `https://github.com/iovisor/bcc/blob/master/tools/${t.id}.py`;
+  document.getElementById('tool-type').textContent = t.type;
+  const oh = document.getElementById('tool-overhead');
+  oh.textContent = t.overhead + '开销';
+  const colors = { '低': ['#10b981','rgba(16,185,129,'], '中': ['#eab308','rgba(234,179,8,'], '高': ['#ef4444','rgba(239,68,68,'] };
+  const c = colors[t.overhead] || colors['中'];
+  oh.style.color = c[0]; oh.style.background = c[1] + '.1)'; oh.style.borderColor = c[1] + '.15)';
+}
+
+async function runProbe() {
+  if (running) return;
+  running = true;
+  const dur = document.getElementById('duration').value;
+  const out = document.getElementById('output');
+  const meta = document.getElementById('output-meta');
+  const runBtn = document.getElementById('run-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const status = document.getElementById('status');
+  runBtn.disabled = true; stopBtn.style.display = 'inline-block';
+  status.textContent = '运行中...'; status.style.color = '#06b6d4';
+  out.textContent = `⏳ 正在运行 ${currentTool}（${dur}秒）...\n`;
+  meta.textContent = `采样中 ${dur}s`;
+  try {
+    const resp = await fetch('/api/ebpf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ probe: currentTool, duration: parseInt(dur) })
+    });
+    const data = await resp.json();
+    if (data.error) { out.textContent = '❌ 错误: ' + data.error; out.style.color = '#f87171'; }
+    else { out.textContent = data.output || '(无输出)'; out.style.color = '#a8e6cf'; meta.textContent = `完成 · ${data.lines || 0}行 · ${(data.duration || 0).toFixed(1)}s`; }
+  } catch (e) { out.textContent = '❌ 请求失败: ' + e.message; out.style.color = '#f87171'; }
+  running = false; runBtn.disabled = false; stopBtn.style.display = 'none';
+  status.textContent = '就绪'; status.style.color = 'var(--text-muted)';
+}
+
+function stopProbe() {
+  fetch('/api/ebpf/stop', { method: 'POST' }).catch(() => {});
+}
+
+// Init
+selectCat(document.querySelector('.cat-tab'), 'cpu');
+</script>
+</body>
+</html>
