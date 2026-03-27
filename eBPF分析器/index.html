@@ -50,6 +50,72 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans S
     <button class="cat-tab" onclick="selectCat(this,'net')">🌐 网络</button>
     <button class="cat-tab" onclick="selectCat(this,'sec')">🛡️ 安全审计</button>
     <button class="cat-tab" onclick="selectCat(this,'app')">🔧 应用层</button>
+    <button class="cat-tab" onclick="showCustomTrace(this)" style="border:1px dashed rgba(249,115,22,.4);color:#f97316">✨ 自定义 Trace</button>
+  </div>
+
+  <!-- Custom Trace Panel (hidden by default) -->
+  <div id="custom-trace-panel" style="display:none;margin-bottom:16px">
+    <div style="background:var(--card);border:1px solid rgba(249,115,22,.25);border-radius:var(--radius);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <span style="font-size:28px">✨</span>
+        <div>
+          <h3 style="font-size:16px;color:#f97316;margin:0">自定义 Trace 生成器</h3>
+          <p style="font-size:11px;color:var(--text-dim);margin:2px 0 0">用自然语言描述你要追踪的内容，AI 会生成对应的 bpftrace/BCC 脚本</p>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div style="margin-bottom:14px">
+        <textarea id="custom-prompt" rows="3" placeholder="例：&#10;• 追踪所有访问 /etc/passwd 文件的进程&#10;• 统计每个进程的 TCP 发送字节数&#10;• 监控超过 100ms 的磁盘 I/O 请求&#10;• 追踪 Node.js 进程的内存分配" style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;resize:vertical;line-height:1.5"></textarea>
+      </div>
+
+      <!-- Quick prompts -->
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text-muted);padding:4px 0">快速选择：</span>
+        <button onclick="setPrompt('追踪所有访问 /etc/passwd 文件的进程')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">🔐 密码文件访问</button>
+        <button onclick="setPrompt('统计每个进程的系统调用次数，按次数排序')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">📊 系统调用统计</button>
+        <button onclick="setPrompt('监控所有超过 50ms 的磁盘 I/O 请求，显示进程名和延迟')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">🐌 慢 I/O 检测</button>
+        <button onclick="setPrompt('追踪所有 DNS 查询（UDP 53端口），显示查询的域名')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">🌐 DNS 查询追踪</button>
+        <button onclick="setPrompt('监控特定进程(node)的文件读写操作和大小')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">📁 Node.js 文件 I/O</button>
+        <button onclick="setPrompt('追踪所有 TCP 连接中 RST 包的发送，用于排查连接异常')" style="font-size:10px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">🔌 TCP RST 追踪</button>
+      </div>
+
+      <!-- Generate button + duration -->
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+        <button onclick="generateTrace()" id="gen-btn" style="padding:8px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;transition:opacity .2s">✨ 生成 Trace</button>
+        <button onclick="runCustomTrace()" id="custom-run-btn" style="padding:8px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;display:none">▶ 运行脚本</button>
+        <button onclick="stopProbe()" id="custom-stop-btn" class="btn-stop">⏹ 停止</button>
+        <select id="custom-duration" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none">
+          <option value="3">3秒</option>
+          <option value="5" selected>5秒</option>
+          <option value="10">10秒</option>
+          <option value="30">30秒</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-muted)" id="custom-status"></span>
+      </div>
+
+      <!-- Generated script display -->
+      <div id="gen-script-area" style="display:none;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:600;color:#f97316">📜 生成的脚本</span>
+          <div style="display:flex;gap:6px">
+            <span class="tag" id="gen-script-type" style="background:rgba(249,115,22,.1);color:#f97316;border:1px solid rgba(249,115,22,.15)">bpftrace</span>
+            <button onclick="copyScript()" style="font-size:10px;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-family:inherit">📋 复制</button>
+          </div>
+        </div>
+        <pre id="gen-script" style="margin:0;padding:12px;background:#0a0a12;border:1px solid var(--border);border-radius:8px;font-family:'Fira Code','SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.6;color:#fbbf24;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;cursor:text" contenteditable="true"></pre>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">💡 脚本可直接编辑，修改后点「运行脚本」执行</div>
+      </div>
+
+      <!-- Output -->
+      <div style="background:#0a0a12;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:rgba(249,115,22,.06);border-bottom:1px solid var(--border)">
+          <span style="font-size:12px;color:#f97316;font-weight:600">📟 Output</span>
+          <span style="font-size:10px;color:var(--text-muted)" id="custom-output-meta"></span>
+        </div>
+        <pre id="custom-output" style="margin:0;padding:14px;font-family:'Fira Code','SF Mono','Cascadia Code',Consolas,monospace;font-size:11.5px;line-height:1.6;color:#a8e6cf;max-height:350px;overflow-y:auto;white-space:pre-wrap;word-break:break-all">描述你的追踪需求，AI 会生成对应的 bpftrace 脚本...</pre>
+      </div>
+    </div>
   </div>
 
   <!-- Main Layout -->
@@ -248,8 +314,93 @@ function stopProbe() {
   fetch('/api/ebpf/stop', { method: 'POST' }).catch(() => {});
 }
 
+// Custom Trace
+let customMode = false;
+function showCustomTrace(btn) {
+  document.querySelectorAll('.cat-tab').forEach(e => e.classList.remove('active'));
+  btn.classList.add('active');
+  customMode = true;
+  document.getElementById('custom-trace-panel').style.display = 'block';
+  document.getElementById('custom-prompt').focus();
+}
+function setPrompt(text) {
+  document.getElementById('custom-prompt').value = text;
+  document.getElementById('custom-prompt').focus();
+}
+function copyScript() {
+  const text = document.getElementById('gen-script').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅ 已复制';
+    setTimeout(() => btn.textContent = '📋 复制', 1500);
+  });
+}
+
+async function generateTrace() {
+  const prompt = document.getElementById('custom-prompt').value.trim();
+  if (!prompt) { alert('请输入追踪需求描述'); return; }
+  const genBtn = document.getElementById('gen-btn');
+  const status = document.getElementById('custom-status');
+  genBtn.disabled = true; genBtn.textContent = '⏳ 生成中...';
+  status.textContent = 'AI 正在生成脚本...'; status.style.color = '#f97316';
+  try {
+    const resp = await fetch('/api/ebpf/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await resp.json();
+    if (data.error) { status.textContent = '❌ ' + data.error; status.style.color = '#f87171'; return; }
+    document.getElementById('gen-script').textContent = data.script;
+    document.getElementById('gen-script-type').textContent = data.type || 'bpftrace';
+    document.getElementById('gen-script-area').style.display = 'block';
+    document.getElementById('custom-run-btn').style.display = 'inline-block';
+    document.getElementById('custom-output').textContent = data.explanation || '脚本已生成，点击「运行脚本」执行';
+    document.getElementById('custom-output').style.color = '#a8e6cf';
+    status.textContent = '✅ 脚本已生成'; status.style.color = '#10b981';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message; status.style.color = '#f87171';
+  }
+  genBtn.disabled = false; genBtn.textContent = '✨ 生成 Trace';
+}
+
+async function runCustomTrace() {
+  const script = document.getElementById('gen-script').textContent.trim();
+  if (!script) return;
+  const dur = document.getElementById('custom-duration').value;
+  const out = document.getElementById('custom-output');
+  const meta = document.getElementById('custom-output-meta');
+  const runBtn = document.getElementById('custom-run-btn');
+  const stopBtn = document.getElementById('custom-stop-btn');
+  const status = document.getElementById('custom-status');
+  runBtn.style.display = 'none'; stopBtn.style.display = 'inline-block';
+  status.textContent = '运行中...'; status.style.color = '#06b6d4';
+  out.textContent = '⏳ 正在执行自定义脚本...\n'; out.style.color = '#a8e6cf';
+  meta.textContent = `采样中 ${dur}s`;
+  try {
+    const resp = await fetch('/api/ebpf/run-custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script, duration: parseInt(dur) })
+    });
+    const data = await resp.json();
+    if (data.error) { out.textContent = '❌ ' + data.error; out.style.color = '#f87171'; }
+    else { out.textContent = data.output || '(无输出)'; out.style.color = '#a8e6cf'; meta.textContent = `完成 · ${data.lines||0}行 · ${(data.duration||0).toFixed(1)}s`; }
+  } catch (e) { out.textContent = '❌ ' + e.message; out.style.color = '#f87171'; }
+  runBtn.style.display = 'inline-block'; stopBtn.style.display = 'none';
+  status.textContent = '就绪'; status.style.color = 'var(--text-muted)';
+}
+
+// Override selectCat to hide custom panel
+const _origSelectCat = selectCat;
+selectCat = function(btn, cat) {
+  customMode = false;
+  document.getElementById('custom-trace-panel').style.display = 'none';
+  _origSelectCat(btn, cat);
+};
+
 // Init
-selectCat(document.querySelector('.cat-tab'), 'cpu');
+document.querySelector('.cat-tab').click();
 </script>
 </body>
 </html>
