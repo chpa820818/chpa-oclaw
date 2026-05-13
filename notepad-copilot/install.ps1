@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     一键安装 Notepad + Copilot 桌面工具。
 
