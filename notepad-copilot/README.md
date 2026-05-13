@@ -23,34 +23,46 @@
 
 ### 1️⃣ 获取代码
 
-**方式 A · `git clone`**（推荐，便于以后 `git pull` 更新）
+> ⚠️ 本仓库还有其它子目录（如 `eBPF分析器/`），如果你 **只想要这个工具**，建议用「方式 A」或「方式 B」按需下载。
+
+**方式 A · 一行命令只下载 `notepad-copilot/`**（推荐，最快、不拉其它内容）
+
+Windows 10/11 自带 `curl.exe` 和 `tar.exe`，可在 PowerShell 里直接执行：
+
+```powershell
+curl.exe -L -o repo.tar.gz https://github.com/chpa820818/chpa-oclaw/archive/refs/heads/main.tar.gz
+tar -xzf repo.tar.gz --strip-components=1 chpa-oclaw-main/notepad-copilot
+del repo.tar.gz
+cd notepad-copilot
+```
+
+完成后当前目录下只会有 `notepad-copilot\`，没有其它子目录。
+
+**方式 B · `git sparse-checkout` 只检出本子目录**（保留 git 历史，方便 `git pull`）
+
+```powershell
+git clone --filter=blob:none --no-checkout --depth=1 https://github.com/chpa820818/chpa-oclaw.git
+cd chpa-oclaw
+git sparse-checkout init --cone
+git sparse-checkout set notepad-copilot
+git checkout main
+cd notepad-copilot
+```
+
+工作区只展开 `notepad-copilot/`；以后想拉新版直接 `git pull` 即可。
+
+**方式 C · 完整 clone**（如果你也想看 repo 里的其它项目）
 
 ```powershell
 git clone https://github.com/chpa820818/chpa-oclaw.git
 cd chpa-oclaw\notepad-copilot
 ```
 
-**方式 B · 下载 ZIP**（无需 git）
+**方式 D · 网页下载 ZIP**（无需任何命令行工具）
 
 1. 打开 https://github.com/chpa820818/chpa-oclaw
 2. 点击绿色 **`<> Code`** 按钮 → **Download ZIP**
-3. 解压，进入 `chpa-oclaw-main\notepad-copilot\` 目录
-
-**方式 C · 直接下安装包**（最快，只下载本工具这一个目录）
-
-```powershell
-# 用 GitHub CLI（如已安装）
-gh repo clone chpa820818/chpa-oclaw -- --depth=1
-cd chpa-oclaw\notepad-copilot
-```
-
-或用 `curl` 拉取压缩包：
-
-```powershell
-curl -L -o chpa-oclaw.zip https://github.com/chpa820818/chpa-oclaw/archive/refs/heads/main.zip
-Expand-Archive .\chpa-oclaw.zip -DestinationPath .
-cd chpa-oclaw-main\notepad-copilot
-```
+3. 解压后只保留 `chpa-oclaw-main\notepad-copilot\` 目录，其余可删
 
 ---
 
