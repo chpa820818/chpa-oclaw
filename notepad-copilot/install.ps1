@@ -1,27 +1,30 @@
-﻿<#
+<#
 .SYNOPSIS
-    一键安装 Notepad + Copilot 桌面工具。
+    One-click installer for Notepad + Copilot desktop tool.
 
 .DESCRIPTION
-    自动检测并安装：
-      - Python 3.10+ (优先走已安装的真实 python，必要时用 winget 安装)
-      - Node.js LTS (用于 GitHub Copilot CLI)
-      - GitHub Copilot CLI (`@github/copilot`, npm 全局)
-      - Azure CLI (可选，--SkipAzureCli 跳过)
-    然后：
-      - 在工具目录下创建 .venv 虚拟环境
-      - pip 安装 requirements.txt
-      - 生成 launch.bat (无控制台窗口启动)
-      - 在桌面 / 开始菜单创建快捷方式
+    Detects and installs (via winget):
+      - Python 3.10+
+      - Node.js LTS (for GitHub Copilot CLI)
+      - GitHub Copilot CLI (@github/copilot, npm global)
+      - Azure CLI (optional, -SkipAzureCli to skip)
+    Then:
+      - Creates a .venv in the tool directory
+      - pip install -r requirements.txt
+      - Generates launch.bat (no console window)
+      - Creates Desktop / Start Menu shortcuts
+
+    All UI strings are intentionally English/ASCII so they render in any
+    Windows console regardless of font or active code page.
 
 .PARAMETER SkipAzureCli
-    跳过 Azure CLI 检测/安装。
+    Skip Azure CLI detection / install.
 
 .PARAMETER NoShortcut
-    不创建桌面 / 开始菜单快捷方式。
+    Do not create Desktop / Start Menu shortcuts.
 
 .PARAMETER Force
-    即使 .venv 已存在也强制重建。
+    Recreate .venv even if it already exists.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -39,59 +42,55 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference   = 'SilentlyContinue'
 
-# Force UTF-8 console I/O so Chinese strings render correctly on PS 5.1.
-# Without this, Write-Host 中文 prints as '?' even with `chcp 65001`.
-try {
-    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-    [Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
-    $OutputEncoding           = [System.Text.UTF8Encoding]::new($false)
-} catch { }
-
-# ---------- 工具函数 ----------------------------------------------------
+# ---------- Helpers -----------------------------------------------------
 
 function Write-Step([string]$msg) {
     Write-Host "`n==> $msg" -ForegroundColor Cyan
 }
-function Write-Ok([string]$msg)   { Write-Host "  [OK] $msg"    -ForegroundColor Green }
-function Write-Warn2([string]$msg){ Write-Host "  [WARN] $msg"  -ForegroundColor Yellow }
-function Write-Err2([string]$msg) { Write-Host "  [FAIL] $msg"  -ForegroundColor Red }
+function Write-Ok  ([string]$msg) { Write-Host "  [OK]   $msg" -ForegroundColor Green  }
+function Write-Warn2([string]$msg){ Write-Host "  [WARN] $msg" -ForegroundColor Yellow }
+function Write-Err2([string]$msg) { Write-Host "  [FAIL] $msg" -ForegroundColor Red    }
 
 function Test-CommandExists([string]$name) {
     $null = Get-Command $name -ErrorAction SilentlyContinue
     return $?
 }
 
-function Invoke-WingetInstall([string]$id, [string]$friendlyName) {
+function Invoke-WingetInstall {
+    param(
+        [Parameter(Mandatory)] [string[]]$Ids,
+        [Parameter(Mandatory)] [string]   $FriendlyName
+    )
     if (-not (Test-CommandExists 'winget')) {
-        throw "winget 未安装，无法自动安装 $friendlyName。请手动安装后重试。"
+        throw "winget not found - cannot auto-install $FriendlyName. Please install it manually."
     }
-    Write-Host "  -> winget install --id $id -e --accept-package-agreements --accept-source-agreements"
-    & winget install --id $id -e --accept-package-agreements --accept-source-agreements --silent
-    if ($LASTEXITCODE -ne 0) {
-        throw "winget 安装 $friendlyName 失败 (exit $LASTEXITCODE)。"
+    foreach ($id in $Ids) {
+        Write-Host "  -> winget install --id $id -e --accept-package-agreements --accept-source-agreements --silent"
+        & winget install --id $id -e --accept-package-agreements --accept-source-agreements --silent
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "$FriendlyName installed (id=$id)."
+            return
+        }
+        Write-Warn2 "winget id '$id' failed (exit $LASTEXITCODE). Trying next candidate..."
     }
-    # PATH 在当前 shell 不会自动刷新；提示用户重开
-    Write-Warn2 "$friendlyName 已安装。新增的 PATH 在当前 PowerShell 不可见，脚本会尝试搜索常见路径。"
+    throw "winget failed to install $FriendlyName. Tried IDs: $($Ids -join ', '). Last exit: $LASTEXITCODE"
 }
 
-# 找一个不是 WindowsApps 重定向占位的真实 python.exe
-function Find-RealPython() {
+# Find a real python.exe (skip the WindowsApps redirector stub).
+function Find-RealPython {
     $candidates = @()
-    # 1. PATH 上的 python（排除 WindowsApps 占位）
     $cmds = Get-Command python -All -ErrorAction SilentlyContinue
     foreach ($c in $cmds) {
         if ($c.Source -and ($c.Source -notmatch 'WindowsApps')) {
             $candidates += $c.Source
         }
     }
-    # 2. py launcher
     if (Test-CommandExists 'py') {
         try {
             $exe = (& py -3 -c "import sys; print(sys.executable)") 2>$null
             if ($exe) { $candidates += $exe.Trim() }
         } catch {}
     }
-    # 3. 常见安装位置
     $patterns = @(
         "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe",
         "$env:ProgramFiles\Python3*\python.exe",
@@ -117,7 +116,13 @@ function Find-RealPython() {
     return $null
 }
 
-# ---------- 路径准备 ----------------------------------------------------
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+    $userPath    = [Environment]::GetEnvironmentVariable('Path','User')
+    $env:Path = "$machinePath;$userPath"
+}
+
+# ---------- Paths -------------------------------------------------------
 
 $ToolDir = $PSScriptRoot
 if (-not $ToolDir) { $ToolDir = (Get-Location).Path }
@@ -125,139 +130,153 @@ $VenvDir = Join-Path $ToolDir '.venv'
 $ReqFile = Join-Path $ToolDir 'requirements.txt'
 
 if (-not (Test-Path $ReqFile)) {
-    throw "未找到 requirements.txt：$ReqFile`n请确认在 notepad-copilot 目录下运行此脚本。"
+    throw "requirements.txt not found at: $ReqFile`nPlease run this script from the notepad-copilot directory."
 }
 
-Write-Host "Notepad + Copilot 一键安装" -ForegroundColor Magenta
-Write-Host "工具目录: $ToolDir`n"
+Write-Host "Notepad + Copilot - one-click installer" -ForegroundColor Magenta
+Write-Host "Tool directory: $ToolDir`n"
 
 # ---------- 1. Python ---------------------------------------------------
 
-Write-Step "检测 Python (>= 3.10) ..."
+Write-Step "Detecting Python (>= 3.10) ..."
 $py = Find-RealPython
 if (-not $py) {
-    Write-Warn2 "未找到符合要求的 Python，开始通过 winget 安装 Python 3.12 ..."
-    Invoke-WingetInstall -id 'Python.Python.3.12' -friendlyName 'Python 3.12'
-    # winget 装完后 PATH 在当前 shell 看不到，直接搜索
+    Write-Warn2 "No suitable Python found. Installing Python 3.12 via winget..."
+    Invoke-WingetInstall -Ids @('Python.Python.3.12') -FriendlyName 'Python 3.12'
     Start-Sleep -Seconds 2
+    Refresh-Path
     $py = Find-RealPython
     if (-not $py) {
-        throw "Python 已通过 winget 安装但脚本无法定位 python.exe。请重开 PowerShell 后重试。"
+        throw "Python was installed via winget but the script could not locate python.exe. Please reopen PowerShell and rerun."
     }
 }
-Write-Ok "Python $($py.Version) -> $($py.Exe)"
+Write-Ok "Python $($py.Version)  ->  $($py.Exe)"
 
 # ---------- 2. Node.js + Copilot CLI -----------------------------------
 
-Write-Step "检测 Node.js (用于 Copilot CLI) ..."
+Write-Step "Detecting Node.js (required for Copilot CLI) ..."
 if (-not (Test-CommandExists 'node')) {
-    Write-Warn2 "未找到 node，通过 winget 安装 Node.js LTS ..."
-    Invoke-WingetInstall -id 'OpenJS.NodeJS.LTS' -friendlyName 'Node.js LTS'
-    # 刷新 PATH 中的 npm/node
-    $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
-    $userPath    = [Environment]::GetEnvironmentVariable('Path','User')
-    $env:Path = "$machinePath;$userPath"
+    Write-Warn2 "node not found. Installing Node.js LTS via winget..."
+    try {
+        # Try multiple known IDs - winget catalog naming varies by version.
+        Invoke-WingetInstall `
+            -Ids @('OpenJS.NodeJS.LTS', 'OpenJS.NodeJS', 'CoreyButler.NVMforWindows') `
+            -FriendlyName 'Node.js LTS'
+        Refresh-Path
+    } catch {
+        Write-Err2 "Node.js auto-install failed: $_"
+        Write-Warn2 "Continuing anyway. You can install Node manually from https://nodejs.org and then run:"
+        Write-Warn2 "    npm install -g @github/copilot"
+    }
 }
 if (Test-CommandExists 'node') {
-    Write-Ok "Node $((node --version).Trim())"
+    try { Write-Ok "Node $((node --version).Trim())" } catch { Write-Ok "Node detected" }
 } else {
-    Write-Warn2 "node 仍不可见；如 Copilot CLI 后续步骤失败请重开 PowerShell。"
+    Write-Warn2 "node still not visible in PATH. Reopen PowerShell after install if needed."
 }
 
-Write-Step "检测 GitHub Copilot CLI ..."
+Write-Step "Detecting GitHub Copilot CLI ..."
 if (-not (Test-CommandExists 'copilot')) {
     if (Test-CommandExists 'npm') {
         Write-Host "  -> npm install -g @github/copilot"
-        & npm install -g '@github/copilot'
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err2 "Copilot CLI 安装失败。可稍后手动执行: npm install -g @github/copilot"
+        try {
+            & npm install -g '@github/copilot'
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err2 "Copilot CLI install failed (npm exit $LASTEXITCODE). Run manually later: npm install -g @github/copilot"
+            }
+        } catch {
+            Write-Err2 "npm install failed: $_"
         }
     } else {
-        Write-Warn2 "npm 不可用，跳过 Copilot CLI 安装。请重开 shell 后执行: npm install -g @github/copilot"
+        Write-Warn2 "npm not available - skipping Copilot CLI install. After installing Node, run: npm install -g @github/copilot"
     }
 }
 if (Test-CommandExists 'copilot') {
     try {
-        $cv = (& copilot --version 2>$null).Trim()
-        Write-Ok "Copilot CLI $cv"
-    } catch { Write-Ok "Copilot CLI 已安装" }
-    Write-Warn2 "首次启动工具前请在终端执行一次 ``copilot`` 完成浏览器登录。"
+        $cv = (& copilot --version 2>$null)
+        if ($cv) { Write-Ok "Copilot CLI $($cv.Trim())" } else { Write-Ok "Copilot CLI installed" }
+    } catch { Write-Ok "Copilot CLI installed" }
+    Write-Warn2 "Before first launch, run 'copilot' once in a terminal to complete browser sign-in."
 } else {
-    Write-Warn2 "Copilot CLI 暂不可用 — 工具仍能启动，但 AI 对话区会报错。"
+    Write-Warn2 "Copilot CLI is not available yet. The desktop tool will still launch, but the AI pane will error out until Copilot CLI is installed and signed in."
 }
 
-# ---------- 3. Azure CLI（可选） ---------------------------------------
+# ---------- 3. Azure CLI (optional) ------------------------------------
 
 if (-not $SkipAzureCli) {
-    Write-Step "检测 Azure CLI (云端归档/账户切换需要，--SkipAzureCli 可跳过) ..."
+    Write-Step "Detecting Azure CLI (needed for cloud archive / account switching, use -SkipAzureCli to skip) ..."
     if (-not (Test-CommandExists 'az')) {
-        Write-Warn2 "未找到 az，通过 winget 安装 Azure CLI ..."
+        Write-Warn2 "az not found. Installing Azure CLI via winget..."
         try {
-            Invoke-WingetInstall -id 'Microsoft.AzureCLI' -friendlyName 'Azure CLI'
+            Invoke-WingetInstall -Ids @('Microsoft.AzureCLI') -FriendlyName 'Azure CLI'
+            Refresh-Path
         } catch {
-            Write-Err2 "Azure CLI 安装失败：$_"
+            Write-Err2 "Azure CLI install failed: $_"
+            Write-Warn2 "Continuing anyway - you can install it later from https://aka.ms/installazurecliwindows"
         }
     } else {
-        Write-Ok "Azure CLI $(((az version --output tsv --query '\"azure-cli\"') 2>$null).Trim())"
+        try {
+            $azv = (& az version --output tsv --query '\"azure-cli\"') 2>$null
+            Write-Ok "Azure CLI $(($azv | Out-String).Trim())"
+        } catch { Write-Ok "Azure CLI detected" }
     }
 } else {
-    Write-Warn2 "已跳过 Azure CLI 检测 (--SkipAzureCli)。"
+    Write-Warn2 "Azure CLI detection skipped (-SkipAzureCli)."
 }
 
-# ---------- 4. 创建虚拟环境 + 安装依赖 ---------------------------------
+# ---------- 4. Virtual env + dependencies ------------------------------
 
-Write-Step "创建 / 复用虚拟环境 .venv ..."
+Write-Step "Creating / reusing virtual environment .venv ..."
 if ($Force -and (Test-Path $VenvDir)) {
-    Write-Warn2 "--Force 指定，删除旧的 .venv ..."
+    Write-Warn2 "-Force given - removing existing .venv ..."
     Remove-Item -Recurse -Force $VenvDir
 }
 if (-not (Test-Path $VenvDir)) {
     & $py.Exe -m venv $VenvDir
     if ($LASTEXITCODE -ne 0) {
-        throw "创建虚拟环境失败 (exit $LASTEXITCODE)。"
+        throw "venv creation failed (exit $LASTEXITCODE)."
     }
-    Write-Ok "已创建 $VenvDir"
+    Write-Ok "Created $VenvDir"
 } else {
-    Write-Ok "复用已有 .venv"
+    Write-Ok "Reusing existing .venv"
 }
 
 $VenvPy  = Join-Path $VenvDir 'Scripts\python.exe'
 $VenvPyW = Join-Path $VenvDir 'Scripts\pythonw.exe'
 if (-not (Test-Path $VenvPy)) {
-    throw ".venv 不完整：$VenvPy 不存在"
+    throw ".venv looks incomplete: $VenvPy missing"
 }
 
-Write-Step "安装 / 升级依赖 (PySide6 等) ..."
+Write-Step "Installing / upgrading dependencies (PySide6, etc.) ..."
 & $VenvPy -m pip install --upgrade pip --quiet
 & $VenvPy -m pip install -r $ReqFile
 if ($LASTEXITCODE -ne 0) {
-    throw "pip 安装依赖失败 (exit $LASTEXITCODE)。"
+    throw "pip install failed (exit $LASTEXITCODE)."
 }
-Write-Ok "依赖安装完成。"
+Write-Ok "Dependencies installed."
 
-# ---------- 5. 生成 launch.bat -----------------------------------------
+# ---------- 5. Generate launch.bat -------------------------------------
 
-Write-Step "生成 launch.bat ..."
+Write-Step "Generating launch.bat ..."
 $LaunchBat = Join-Path $ToolDir 'launch.bat'
 $launchContent = @"
 @echo off
-REM Notepad + Copilot —— 由 install.ps1 生成
-REM 使用 .venv 内的 pythonw.exe，无控制台窗口
+REM Notepad + Copilot - generated by install.ps1
+REM Uses .venv\Scripts\pythonw.exe so no console window appears.
 cd /d "%~dp0"
 start "" "$VenvPyW" main.py
 "@
 Set-Content -Path $LaunchBat -Value $launchContent -Encoding ASCII
 Write-Ok "$LaunchBat"
 
-# ---------- 6. 快捷方式 ------------------------------------------------
+# ---------- 6. Shortcuts -----------------------------------------------
 
 if (-not $NoShortcut) {
-    Write-Step "创建桌面 / 开始菜单快捷方式 ..."
+    Write-Step "Creating Desktop / Start Menu shortcuts ..."
     $WshShell = New-Object -ComObject WScript.Shell
-    $iconPath = Join-Path $ToolDir 'main.py'  # 没有专门 .ico，先用 launch.bat 的默认图标
 
     $targets = @(
-        (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Notepad + Copilot.lnk'),
+        (Join-Path ([Environment]::GetFolderPath('Desktop'))  'Notepad + Copilot.lnk'),
         (Join-Path ([Environment]::GetFolderPath('Programs')) 'Notepad + Copilot.lnk')
     )
     foreach ($lnk in $targets) {
@@ -265,27 +284,27 @@ if (-not $NoShortcut) {
             $sc = $WshShell.CreateShortcut($lnk)
             $sc.TargetPath       = $LaunchBat
             $sc.WorkingDirectory = $ToolDir
-            $sc.WindowStyle      = 7   # 最小化（实际窗口由 pythonw 弹出）
-            $sc.Description      = 'Notepad + Copilot CLI 桌面工具'
+            $sc.WindowStyle      = 7   # minimized; the actual UI is opened by pythonw
+            $sc.Description      = 'Notepad + Copilot CLI desktop tool'
             $sc.Save()
             Write-Ok $lnk
         } catch {
-            Write-Warn2 "无法创建快捷方式 $lnk : $_"
+            Write-Warn2 "Could not create shortcut $lnk : $_"
         }
     }
 }
 
-# ---------- 7. 完成 -----------------------------------------------------
+# ---------- 7. Done ----------------------------------------------------
 
 Write-Host "`n==============================================" -ForegroundColor Magenta
-Write-Host " 安装完成 ✅" -ForegroundColor Green
+Write-Host "  Installation complete." -ForegroundColor Green
 Write-Host "==============================================" -ForegroundColor Magenta
 Write-Host ""
-Write-Host "启动方式："
-Write-Host "  1. 双击桌面快捷方式 「Notepad + Copilot」"
-Write-Host "  2. 或运行 $LaunchBat"
-Write-Host "  3. 或在此目录执行: .\.venv\Scripts\python.exe main.py"
+Write-Host "How to launch:"
+Write-Host "  1. Double-click the Desktop shortcut 'Notepad + Copilot'"
+Write-Host "  2. Or run: $LaunchBat"
+Write-Host "  3. Or in this directory: .\.venv\Scripts\python.exe main.py"
 Write-Host ""
 if (Test-CommandExists 'copilot') {
-    Write-Host "提示：首次使用 AI 对话前，请在终端执行一次 ``copilot`` 完成浏览器登录。" -ForegroundColor Yellow
+    Write-Host "Tip: before first AI use, run 'copilot' once in a terminal to complete the browser sign-in." -ForegroundColor Yellow
 }

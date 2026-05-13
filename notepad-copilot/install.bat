@@ -1,6 +1,5 @@
 @echo off
-REM 双击此文件即可一键安装 Notepad + Copilot
-chcp 65001 >nul
+REM Double-click to one-click install Notepad + Copilot
 cd /d "%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*
 echo.
