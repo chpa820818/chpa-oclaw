@@ -39,6 +39,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference   = 'SilentlyContinue'
 
+# Force UTF-8 console I/O so Chinese strings render correctly on PS 5.1.
+# Without this, Write-Host 中文 prints as '?' even with `chcp 65001`.
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    [Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+    $OutputEncoding           = [System.Text.UTF8Encoding]::new($false)
+} catch { }
+
 # ---------- 工具函数 ----------------------------------------------------
 
 function Write-Step([string]$msg) {
