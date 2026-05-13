@@ -21,9 +21,42 @@
 
 ## 🚀 快速开始
 
-### 一键安装（推荐）
+### 1️⃣ 获取代码
 
-右键 → 「以管理员身份运行」`install.bat`，脚本会：
+**方式 A · `git clone`**（推荐，便于以后 `git pull` 更新）
+
+```powershell
+git clone https://github.com/chpa820818/chpa-oclaw.git
+cd chpa-oclaw\notepad-copilot
+```
+
+**方式 B · 下载 ZIP**（无需 git）
+
+1. 打开 https://github.com/chpa820818/chpa-oclaw
+2. 点击绿色 **`<> Code`** 按钮 → **Download ZIP**
+3. 解压，进入 `chpa-oclaw-main\notepad-copilot\` 目录
+
+**方式 C · 直接下安装包**（最快，只下载本工具这一个目录）
+
+```powershell
+# 用 GitHub CLI（如已安装）
+gh repo clone chpa820818/chpa-oclaw -- --depth=1
+cd chpa-oclaw\notepad-copilot
+```
+
+或用 `curl` 拉取压缩包：
+
+```powershell
+curl -L -o chpa-oclaw.zip https://github.com/chpa820818/chpa-oclaw/archive/refs/heads/main.zip
+Expand-Archive .\chpa-oclaw.zip -DestinationPath .
+cd chpa-oclaw-main\notepad-copilot
+```
+
+---
+
+### 2️⃣ 一键安装（推荐）
+
+进入 `notepad-copilot\` 目录后，右键 → 「以管理员身份运行」`install.bat`，脚本会：
 
 1. 通过 `winget` 自动检测/安装 Python 3.12、Node.js LTS、GitHub Copilot CLI、Azure CLI
 2. 创建独立 `.venv` 并安装 `requirements.txt`
@@ -34,11 +67,10 @@
 
 > 详细步骤、可选参数、排障表请见 **[INSTALL.md](INSTALL.md)**。
 
-### 手动安装
+### 3️⃣ 手动安装（不想用一键脚本时）
 
 ```powershell
 # 前置：Python 3.10+、Node.js LTS、Copilot CLI (npm i -g @github/copilot)、Azure CLI
-git clone https://github.com/chpa820818/chpa-oclaw.git
 cd chpa-oclaw\notepad-copilot
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
