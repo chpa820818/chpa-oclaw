@@ -3,6 +3,10 @@
 > Windows 桌面工具：把"OneNote 风格的笔记"和"GitHub Copilot CLI 交互"放在同一个窗口里，
 > 按"案例 (Case)"组织内容，方便排障/调研工作流的全流程记录与归档。
 
+**当前发布版本**：[`v0.1.1`](https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.1)
+
+**下载发布包**：[`notepad-copilot-v0.1.1.zip`](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.1/notepad-copilot-v0.1.1.zip)
+
 ---
 
 ## ✨ 功能概览
@@ -58,11 +62,11 @@ git clone https://github.com/chpa820818/chpa-oclaw.git
 cd chpa-oclaw\notepad-copilot
 ```
 
-**方式 D · 网页下载 ZIP**（无需任何命令行工具）
+**方式 D · 下载发布包 ZIP**（无需任何命令行工具，推荐给普通用户）
 
-1. 打开 https://github.com/chpa820818/chpa-oclaw
-2. 点击绿色 **`<> Code`** 按钮 → **Download ZIP**
-3. 解压后只保留 `chpa-oclaw-main\notepad-copilot\` 目录，其余可删
+1. 打开最新发布页：https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.1
+2. 下载 **`notepad-copilot-v0.1.1.zip`**
+3. 解压后进入 `notepad-copilot\` 目录
 
 ---
 
