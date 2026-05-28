@@ -81,10 +81,10 @@ Tkinter 是 Python 标准库的一部分，通常无需额外安装。
 默认输出到：
 
 ```text
-copilot-workspace\reports\screen-gif-studio
+.\output
 ```
 
-可在工具右上角修改输出目录。
+即工具所在目录下的 `output` 文件夹，可在工具右上角修改输出目录。
 
 ## 文件说明
 

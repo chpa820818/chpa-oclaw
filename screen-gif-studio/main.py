@@ -58,7 +58,7 @@ def workspace_root() -> Path:
 
 
 def default_output_dir() -> Path:
-    out = workspace_root() / "reports" / "screen-gif-studio"
+    out = Path(__file__).resolve().parent / "output"
     out.mkdir(parents=True, exist_ok=True)
     return out
 
