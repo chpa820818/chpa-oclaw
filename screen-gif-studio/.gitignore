@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.mp4
+*.gif
+*.mov
+*.mkv
+*.avi
+*.webm
+*.ppm
+*.png
+.DS_Store
+Thumbs.db
