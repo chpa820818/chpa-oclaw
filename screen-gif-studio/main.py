@@ -39,7 +39,8 @@ from tkinter import (
 )
 
 
-APP_TITLE = "录屏 GIF 工具"
+APP_VERSION = "1.0.0"
+APP_TITLE = f"录屏 GIF 工具 v{APP_VERSION}"
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 COLOR_BG = "#f5f7fb"
 COLOR_CARD = "#ffffff"
@@ -401,7 +402,7 @@ class ScreenGifStudio(Tk):
         header.pack(fill=X)
         title_block = ttk.Frame(header, style="Header.TFrame")
         title_block.pack(side=LEFT, fill=X, expand=True, padx=14, pady=6)
-        ttk.Label(title_block, text="录屏 GIF 工具", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(title_block, text=APP_TITLE, style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             title_block,
             text="录屏、转 GIF、拼接与拆分，全部在一个简洁工具里完成",

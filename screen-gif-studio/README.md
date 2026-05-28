@@ -1,5 +1,9 @@
 # 录屏 GIF 工具
 
+当前版本：**v1.0.0**
+
+[一键下载最新版 ZIP](https://github.com/chpa820818/chpa-oclaw/releases/latest/download/screen-gif-studio-v1.0.0.zip)
+
 一个 Windows 桌面小工具，用于录屏、转 GIF、视频拼接和视频拆分。界面使用 Python Tkinter 实现，媒体处理依赖 FFmpeg。
 
 ## 功能
@@ -89,6 +93,11 @@ copilot-workspace\reports\screen-gif-studio
 | `main.py` | 主程序 |
 | `run.ps1` | 启动脚本 |
 | `install-ffmpeg.ps1` | FFmpeg 安装脚本 |
+| `VERSION` | 当前版本号 |
+
+## 版本
+
+当前发布版本：`v1.0.0`
 
 ## 注意事项
 
