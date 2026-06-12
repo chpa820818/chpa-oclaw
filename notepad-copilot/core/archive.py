@@ -1,10 +1,11 @@
-"""One-click archive: bundle editor notes + result Q&A into a markdown
+"""One-click archive: bundle editor notes + result Q&A into markdown/HTML
 report directory under copilot-workspace\\reports\\archive\\.
 
 Layout produced::
 
     <archive_root>/<YYYYMMDD-HHMMSS>-archive/
         archive.md           # combined report
+        archive.html         # combined report rendered as standalone HTML
         redact_map.json      # placeholder -> original (only when redacted)
         assets/              # copied screenshots/images
             img-001.png
@@ -13,10 +14,13 @@ Layout produced::
 from __future__ import annotations
 
 import datetime as _dt
+import html as _html
 import json as _json
 import re
 import shutil
 from pathlib import Path
+
+from markdown import markdown as _markdown_to_html
 
 from core.redact import Redactor
 
@@ -43,11 +47,11 @@ def archive_session(
     redact: bool = True,
     refine_tsg: bool = False,
 ) -> Path:
-    """Write a single ``archive.md`` plus assets/ into target_dir.
+    """Write ``archive.md`` + ``archive.html`` plus assets/ into target_dir.
 
     When ``redact`` is True, customer PII (GUIDs, emails, IPs, RG/resource
     names inside ARM IDs, secrets) is replaced with stable placeholders
-    and the mapping is dumped to ``redact_map.json`` next to archive.md.
+    and the mapping is dumped to ``redact_map.json`` next to the archive.
 
     When ``refine_tsg`` is True, after producing the raw combined report
     we additionally invoke the local ``copilot`` CLI to refine it into a
@@ -56,7 +60,11 @@ def archive_session(
     ``archive.raw.md``. If refinement fails, the raw version is kept as
     ``archive.md`` and ``archive.tsg.error.txt`` records the error.
 
-    Returns the path of the written archive.md file.
+    ``archive.html`` is rendered from the final markdown after redaction and
+    optional TSG refinement, so it is safe to share under the same constraints
+    as ``archive.md``.
+
+    Returns the path of the written archive.md file for existing callers.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
     assets_dir = target_dir / "assets"
@@ -117,8 +125,17 @@ def archive_session(
     )
 
     archive_md = target_dir / "archive.md"
+    archive_html = target_dir / "archive.html"
     raw_body = header + note_section + qa_section
     archive_md.write_text(raw_body, encoding="utf-8")
+    _write_html_report(
+        archive_md,
+        archive_html,
+        title=title + redact_badge,
+        redacted=redact,
+    )
+    if not archive_html.is_file():
+        raise RuntimeError(f"HTML 归档生成失败: {archive_html}")
 
     if redactor and redactor.mapping:
         (target_dir / "redact_map.json").write_text(
@@ -163,6 +180,18 @@ def archive_session(
             )
             # Keep the raw report as archive.md (already written above)
 
+    # Refresh HTML after optional TSG refinement. If refinement failed, this
+    # keeps the already-written raw HTML in place and simply regenerates it
+    # from the final archive.md.
+    _write_html_report(
+        archive_md,
+        archive_html,
+        title=title + redact_badge,
+        redacted=redact,
+    )
+    if not archive_html.is_file():
+        raise RuntimeError(f"HTML 归档生成失败: {archive_html}")
+
     return archive_md
 
 
@@ -188,3 +217,149 @@ def _rewrite_image_refs(md: str, name_map: dict[str, str]) -> str:
         return m.group(0)
 
     return _IMG_RE.sub(_sub, md)
+
+
+def _write_html_report(
+    markdown_path: Path,
+    html_path: Path,
+    *,
+    title: str,
+    redacted: bool,
+) -> None:
+    """Render the final archive markdown into a standalone HTML report."""
+    md = markdown_path.read_text(encoding="utf-8")
+    body = _markdown_to_html(
+        md,
+        extensions=["extra", "sane_lists", "nl2br", "tables", "fenced_code"],
+        output_format="html5",
+    )
+    safe_title = _html.escape(title or "归档报告")
+    badge = (
+        '<span class="badge">已脱敏</span>'
+        if redacted else '<span class="badge badge-warn">未脱敏</span>'
+    )
+    doc = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{safe_title}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --fg: #24292f;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --bg: #ffffff;
+      --soft: #f6f8fa;
+      --accent: #0969da;
+      --safe: #1a7f37;
+      --warn: #9a6700;
+    }}
+    body {{
+      margin: 0;
+      background: var(--soft);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }}
+    main {{
+      max-width: 1040px;
+      margin: 24px auto;
+      padding: 32px 40px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(140, 149, 159, 0.18);
+    }}
+    .topline {{
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #dafbe1;
+      color: var(--safe);
+      font-size: 12px;
+      font-weight: 600;
+    }}
+    .badge-warn {{
+      background: #fff8c5;
+      color: var(--warn);
+    }}
+    h1, h2, h3 {{
+      line-height: 1.25;
+      margin-top: 1.4em;
+    }}
+    h1 {{
+      margin-top: 0;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid var(--border);
+    }}
+    h2 {{
+      padding-bottom: 0.2em;
+      border-bottom: 1px solid #eaeef2;
+    }}
+    a {{ color: var(--accent); }}
+    blockquote {{
+      margin: 1em 0;
+      padding: 0 1em;
+      color: var(--muted);
+      border-left: 0.25em solid var(--border);
+    }}
+    code {{
+      padding: 0.2em 0.4em;
+      background: var(--soft);
+      border-radius: 6px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.92em;
+    }}
+    pre {{
+      overflow: auto;
+      padding: 16px;
+      background: var(--soft);
+      border-radius: 8px;
+    }}
+    pre code {{
+      padding: 0;
+      background: transparent;
+    }}
+    table {{
+      border-collapse: collapse;
+      width: 100%;
+      display: block;
+      overflow-x: auto;
+    }}
+    th, td {{
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+    }}
+    th {{ background: var(--soft); }}
+    img {{
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }}
+    @media print {{
+      body {{ background: #fff; }}
+      main {{
+        margin: 0;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="topline">{badge}</div>
+    {body}
+  </main>
+</body>
+</html>
+"""
+    html_path.write_text(doc, encoding="utf-8")

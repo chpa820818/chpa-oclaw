@@ -22,7 +22,7 @@ from core.copilot_runner import CopilotRunner
 
 # Footer pattern (token / request stats) — only matched at the END of output.
 _FOOTER_LINE_RE = re.compile(
-    r"^\s*(Changes\b|Requests\b|Tokens\b|↑|↓|Premium\b)"
+    r"^\s*(Changes\b|Requests\b|Tokens\b|AI Credits\b|↑|↓|Premium\b)"
 )
 
 # ANSI escape sequences — Copilot CLI emits color codes via stdout.
@@ -37,6 +37,35 @@ _ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _TOOL_START_RE = re.compile(r"[●✗]\s")
 _TOOL_END_RE = re.compile(r"^\s*└", re.MULTILINE)
 
+_FINAL_BEGIN = "<<<NOTEPAD_COPILOT_FINAL_ANSWER>>>"
+_FINAL_END = "<<<END_NOTEPAD_COPILOT_FINAL_ANSWER>>>"
+_FINAL_BLOCK_RE = re.compile(
+    rf"{re.escape(_FINAL_BEGIN)}\s*(.*?)\s*{re.escape(_FINAL_END)}",
+    re.DOTALL,
+)
+_CODELIKE_LINE_RE = re.compile(
+    r"^\s*(?:"
+    r"\d+\.\s*$|"
+    r"\d+\.\s+\S{1,80}$|"
+    r"[|`{}\[\]]|"
+    r"(?:kubectl|crictl|az|curl|tail|cat|grep|where|summarize|"
+    r"ContainerLogV2|namespaceFilteringMode|Exclude_Path)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _with_final_answer_contract(prompt: str) -> str:
+    """Ask the CLI to keep the user-facing answer complete and final."""
+    return (
+        f"{prompt.rstrip()}\n\n"
+        "请在回答最后给出完整的用户可见结果，保留必要的分析、依据、"
+        "查询语句、对比和结论；不要只给一句摘要。\n"
+        f"请将这段完整最终结果严格包裹在 {_FINAL_BEGIN} 和 "
+        f"{_FINAL_END} 之间；标记内不要输出工具调用、调试信息或 "
+        "token 统计说明。"
+    )
+
 
 def _strip_footer(text: str) -> str:
     """Trim trailing footer lines (walk from the bottom)."""
@@ -50,6 +79,46 @@ def _strip_footer(text: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _extract_marked_answer(text: str) -> str:
+    matches = list(_FINAL_BLOCK_RE.finditer(text))
+    if not matches:
+        return ""
+    return matches[-1].group(1).strip()
+
+
+def _tail_answer_from_unmarked_output(text: str) -> str:
+    """Best-effort fallback for older runs where the CLI did not emit markers."""
+    return text.strip()
+
+
+def _strip_tool_blocks(text: str) -> str:
+    """Remove CLI tool-call chrome while preserving narrative answer text."""
+    cleaned_lines: list[str] = []
+    in_block = False
+    skip_continuation = False
+    for line in text.splitlines():
+        if skip_continuation:
+            if line.startswith((" ", "\t")) and line.strip():
+                continue
+            skip_continuation = False
+
+        if not in_block and _TOOL_START_RE.search(line[:6]):
+            in_block = True
+            continue
+
+        if in_block:
+            if _TOOL_END_RE.match(line):
+                in_block = False
+                skip_continuation = True
+            continue
+
+        if line.lstrip().startswith("│"):
+            continue
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines).strip()
+
+
 def _strip_thinking(text: str) -> str:
     """Remove Copilot CLI tool-call traces and interim narration.
 
@@ -57,14 +126,17 @@ def _strip_thinking(text: str) -> str:
       1. Drop ANSI escapes.
       2. Strip footer (token stats etc.).
       3. If the output contains tool-call markers (`●` / `✗` / `└`),
-         keep only what comes AFTER the last `└` line — Copilot writes
-         the final answer there once tool work is done.
+         remove the tool-call chrome but keep the narrative answer text.
       4. If no markers exist, the whole stream is already the answer.
-      5. As a safety net, if step 3 leaves <40 chars (model never
-         produced a real final answer), fall back to the full text
-         minus inline `●...└` blocks so the user still sees something.
+      5. As a safety net, keep the old "after last └" tail only when the
+         cleaned narrative is not materially richer.
     """
     text = _ANSI_RE.sub("", text)
+    marked = _extract_marked_answer(text)
+    if marked:
+        return _strip_footer(marked).strip()
+
+    text = text.replace(_FINAL_BEGIN, "").replace(_FINAL_END, "")
     text = _strip_footer(text)
     if not text:
         return ""
@@ -73,7 +145,9 @@ def _strip_thinking(text: str) -> str:
         _TOOL_END_RE.search(text) or _TOOL_START_RE.search(text)
     )
     if not has_tool_blocks:
-        return text.strip()
+        return _tail_answer_from_unmarked_output(text)
+
+    cleaned = _strip_tool_blocks(text)
 
     # Find the byte offset just past the last "└ ..." line.
     last_end = -1
@@ -98,23 +172,16 @@ def _strip_thinking(text: str) -> str:
 
     tail = text[last_end + 1:].strip() if last_end >= 0 else ""
 
+    # Older behavior returned only `tail`, which often collapses a detailed
+    # final answer down to a last-line "总结". Prefer the full non-tool
+    # narrative when it clearly contains more user-facing content.
+    if cleaned and (not tail or len(cleaned) > len(tail) * 1.25):
+        return cleaned
+
     if len(tail) >= 40:
         return tail
 
-    # Fallback — strip out individual ● / ✗ ... └ blocks but keep narration.
-    cleaned_lines: list[str] = []
-    in_block = False
-    for line in text.splitlines():
-        if not in_block and _TOOL_START_RE.search(line[:6]):
-            in_block = True
-            continue
-        if in_block:
-            if _TOOL_END_RE.match(line):
-                in_block = False
-            continue
-        cleaned_lines.append(line)
-    fallback = "\n".join(cleaned_lines).strip()
-    return fallback or tail or text.strip()
+    return cleaned or tail or text.strip()
 
 
 def _split_answer_and_footer(buf: str) -> tuple[str, str]:
@@ -354,6 +421,8 @@ class ChatPane(QWidget):
         else:
             full = prompt
 
+        full = _with_final_answer_contract(full)
+
         if new_attachments:
             labels.append(f"+{len(new_attachments)}图")
         label = f"[{' '.join(labels)}] " if labels else ""
@@ -382,7 +451,9 @@ class ChatPane(QWidget):
     def _on_finished(self, code: int):
         self._append_output(f"\n[进程退出 code={code}]\n")
         self._set_status("就绪", busy=False)
-        full_output = "".join(self._buffer)
+        buffered_output = "".join(self._buffer)
+        runner_output = self.runner.last_output()
+        full_output = runner_output or buffered_output
         answer, _footer = _split_answer_and_footer(full_output)
         if answer:
             self.answer_ready.emit(self._current_question, answer)

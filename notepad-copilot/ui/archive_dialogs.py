@@ -31,7 +31,7 @@ class ArchiveOptionsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         intro = QLabel(
-            f"将笔记区 + 结果区整合为一个 Markdown 报告"
+            f"将笔记区 + 结果区整合为 Markdown + HTML 报告"
             f"{'并上传到 Wiki' if cloud_mode else ''}。"
         )
         intro.setWordWrap(True)

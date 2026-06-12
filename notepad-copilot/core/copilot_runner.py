@@ -35,6 +35,8 @@ _LOG_FILE = (
     / "copilot-temp" / "sessions" / "copilot-runner.log"
 )
 
+_PROMPT_FILE_THRESHOLD = 12000
+
 
 def _log(msg: str) -> None:
     try:
@@ -131,6 +133,7 @@ class _ReaderThread(QThread):
     def __init__(self, stream, parent=None):
         super().__init__(parent)
         self._stream = stream
+        self._chunks: list[str] = []
 
     def run(self):
         try:
@@ -142,11 +145,17 @@ class _ReaderThread(QThread):
                     text = data.decode("utf-8", errors="replace")
                 else:
                     text = data
-                self.chunk.emit(_strip_ansi(text))
+                text = _strip_ansi(text)
+                self._chunks.append(text)
+                self.chunk.emit(text)
         except Exception as e:
             _log(f"reader exception: {e}")
         finally:
             self.finished_reading.emit()
+
+    def text(self) -> str:
+        """Return every chunk read from the child process."""
+        return "".join(self._chunks)
 
 
 class _WaiterThread(QThread):
@@ -180,6 +189,8 @@ class CopilotRunner(QObject):
         self._popen: subprocess.Popen | None = None
         self._reader: _ReaderThread | None = None
         self._waiter: _WaiterThread | None = None
+        self._prompt_file: Path | None = None
+        self._last_output: str = ""
         self._stdin_lock = threading.Lock()
         # First send is a fresh session; subsequent sends use --resume=<name>.
         self._sent_in_session: int = 0
@@ -203,6 +214,7 @@ class CopilotRunner(QObject):
 
     def stop(self):
         if self._popen is None:
+            self._cleanup_prompt_file()
             return
         try:
             if self._popen.poll() is None:
@@ -218,6 +230,7 @@ class CopilotRunner(QObject):
             self._popen = None
             self._reader = None
             self._waiter = None
+            self._cleanup_prompt_file()
 
     # --- send ----------------------------------------------------------
 
@@ -239,8 +252,8 @@ class CopilotRunner(QObject):
         attachments = [str(p) for p in (attachments or [])]
 
         resume = self._sent_in_session > 0
-        self._spawn(prompt, resume=resume, attachments=attachments)
-        self._sent_in_session += 1
+        if self._spawn(prompt, resume=resume, attachments=attachments):
+            self._sent_in_session += 1
 
     def reset_session(self):
         """Drop session continuity so the next send starts fresh."""
@@ -254,10 +267,14 @@ class CopilotRunner(QObject):
         """True if at least one prompt has been sent since last reset."""
         return self._sent_in_session > 0
 
+    def last_output(self) -> str:
+        """Return the complete stdout collected for the most recent run."""
+        return self._last_output
+
     # --- spawn ---------------------------------------------------------
 
     def _spawn(self, prompt: str, resume: bool,
-               attachments: list[str] | None = None):
+               attachments: list[str] | None = None) -> bool:
         self.stop()
         # --allow-all = --allow-all-tools + --allow-all-paths + --allow-all-urls
         # Path permission matters when the model needs to read files
@@ -271,10 +288,12 @@ class CopilotRunner(QObject):
             extra.extend(["--name", self._session_name])
         for path in (attachments or []):
             extra.extend(["--attachment", path])
-        argv = [self._program, *self._prefix_args, "-p", prompt, *extra]
+        prompt_arg = self._prompt_arg(prompt)
+        argv = [self._program, *self._prefix_args, "-p", prompt_arg, *extra]
         _log(
             f"spawn: resume={resume} session={self._session_name!r} "
             f"argc={len(argv)} prompt_len={len(prompt)} "
+            f"prompt_arg_len={len(prompt_arg)} "
             f"attachments={attachments}"
         )
         try:
@@ -292,11 +311,13 @@ class CopilotRunner(QObject):
             )
         except Exception as e:
             _log(f"Popen failed: {e!r}")
+            self._cleanup_prompt_file()
             self.error_occurred.emit(f"启动失败: {e}")
-            return
+            return False
         self._popen = popen
         self._start_threads(popen)
         self.process_started.emit()
+        return True
 
     # --- helpers -------------------------------------------------------
 
@@ -311,13 +332,46 @@ class CopilotRunner(QObject):
         self._waiter = waiter
         waiter.start()
 
+    def _prompt_arg(self, prompt: str) -> str:
+        """Return a short CLI prompt, spilling very large prompts to a file."""
+        if len(prompt) <= _PROMPT_FILE_THRESHOLD:
+            return prompt
+        try:
+            _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            prompt_file = (
+                _LOG_FILE.parent
+                / f"notepad-prompt-{uuid.uuid4().hex[:12]}.md"
+            )
+            prompt_file.write_text(prompt, encoding="utf-8")
+            self._prompt_file = prompt_file
+            _log(f"prompt spilled to file: {prompt_file}")
+            return (
+                "我的完整问题和上下文太长，已保存到本地 UTF-8 文件：\n"
+                f"{prompt_file}\n\n"
+                "请先读取该文件的全部内容，再根据其中的笔记、问题和上下文回答。"
+            )
+        except Exception as e:
+            _log(f"prompt spill failed: {e!r}; using inline prompt")
+            return prompt
+
+    def _cleanup_prompt_file(self) -> None:
+        p = self._prompt_file
+        self._prompt_file = None
+        if p is None:
+            return
+        try:
+            p.unlink(missing_ok=True)
+        except Exception as e:
+            _log(f"prompt cleanup failed: {e!r}")
+
     def _on_finished(self, code: int):
         _log(f"process finished: code={code}")
         # Make sure reader drains before we report finish.
         if self._reader is not None:
             self._reader.wait(2000)
+            self._last_output = self._reader.text()
         self.process_finished.emit(int(code))
         self._popen = None
         self._reader = None
         self._waiter = None
-
+        self._cleanup_prompt_file()

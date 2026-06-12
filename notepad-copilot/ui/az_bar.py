@@ -73,6 +73,7 @@ class AzAccountBar(QWidget):
         self._all_subs: list[dict] = []
         self._workers: list[_AzWorker] = []
         self._busy_count = 0
+        self._refresh_in_progress = False
         self._build_ui()
         self.refresh()
 
@@ -147,6 +148,9 @@ class AzAccountBar(QWidget):
                       self.logout_btn, self.user_box):
                 w.setEnabled(False)
             return
+        if self._refresh_in_progress:
+            return
+        self._refresh_in_progress = True
         self._begin_busy("正在读取 Azure 账户和订阅…")
 
         def work():
@@ -158,6 +162,7 @@ class AzAccountBar(QWidget):
             }
 
         def on_done(data, err):
+            self._refresh_in_progress = False
             self._end_busy()
             if err is not None:
                 QMessageBox.warning(self, "刷新失败", str(err))
@@ -290,7 +295,7 @@ class AzAccountBar(QWidget):
             self._suspend_signals = False
         new_sub_id = self.sub_box.currentData()
         if new_sub_id and (not cur or cur.subscription_id != new_sub_id):
-            self._async_set_subscription(new_sub_id)
+            self._async_set_subscription(new_sub_id, expected_user=user)
 
     def _on_sub_changed(self, idx: int):
         if self._suspend_signals or idx < 0:
@@ -298,9 +303,10 @@ class AzAccountBar(QWidget):
         sub_id = self.sub_box.itemData(idx)
         if not sub_id:
             return
-        self._async_set_subscription(sub_id)
+        user = self.user_box.itemData(self.user_box.currentIndex())
+        self._async_set_subscription(sub_id, expected_user=user)
 
-    def _async_set_subscription(self, sub_id: str):
+    def _async_set_subscription(self, sub_id: str, expected_user: str | None):
         self._begin_busy(f"切换订阅 → {sub_id[:8]}…")
 
         def on_done(_res, err):
@@ -309,9 +315,42 @@ class AzAccountBar(QWidget):
                 QMessageBox.critical(self, "切换订阅失败", str(err))
                 self.refresh()
                 return
+            self.refresh()
             self.account_changed.emit()
 
-        self._run_async(lambda: self.az.set_subscription(sub_id), on_done)
+        self._run_async(
+            lambda: self._set_subscription_verified(sub_id, expected_user),
+            on_done,
+        )
+
+    def _set_subscription_verified(
+        self,
+        sub_id: str,
+        expected_user: str | None,
+    ):
+        """Switch subscription, then return the actual Azure CLI context."""
+        self.az.set_subscription(sub_id)
+        actual = self.az.current_account()
+        if actual is None:
+            raise RuntimeError("切换后无法读取当前 Azure CLI 上下文。")
+        if actual.subscription_id.lower() != sub_id.lower():
+            raise RuntimeError(
+                "Azure CLI 切换后返回的订阅与目标不一致。\n\n"
+                f"目标订阅: {sub_id}\n"
+                f"实际订阅: {actual.subscription_id}\n"
+                f"实际账户: {actual.user}"
+            )
+        if expected_user and actual.user.lower() != expected_user.lower():
+            raise RuntimeError(
+                "Azure CLI 切换后返回的账户与目标不一致。\n\n"
+                f"目标账户: {expected_user}\n"
+                f"实际账户: {actual.user}\n"
+                f"订阅: {actual.subscription_name} ({actual.subscription_id})\n\n"
+                "这通常表示多个账户都能访问同一个订阅，Azure CLI "
+                "按订阅 ID 切换时选中了另一组凭据。请先在顶部账户栏"
+                "点击“添加账户”重新登录目标账户，或登出不需要的账户后重试。"
+            )
+        return actual
 
     def _on_cloud_changed(self, name: str):
         if self._suspend_signals or not name:

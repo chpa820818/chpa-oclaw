@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import os
 import datetime as _datetime
+import hashlib as _hashlib
+import html as _html
 import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
@@ -185,7 +187,6 @@ class MainWindow(QMainWindow):
         self._build_menu()
 
         self.chat.send_requested.connect(self._on_send)
-        self.chat.answer_ready.connect(self.result.append_answer)
         self.chat.answer_ready.connect(self._on_qa_ready)
         self.result.archive_btn.clicked.connect(self._on_archive)
         self.result.cloud_btn.clicked.connect(self._on_cloud_archive)
@@ -204,6 +205,7 @@ class MainWindow(QMainWindow):
         # Auto-save: only saves when a case is open
         self._autosave_last_note_hash: str = ""
         self._autosave_last_qa_count: int = 0
+        self._last_case_save_error: str = ""
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setInterval(5000)
         self._autosave_timer.timeout.connect(self._on_autosave_tick)
@@ -331,6 +333,19 @@ class MainWindow(QMainWindow):
     # --- helpers ------------------------------------------------------
 
     def _confirm_discard(self) -> bool:
+        if self._current_case is not None and self.editor.document().isModified():
+            if self._save_case_note(silent=True):
+                return True
+            msg = self._last_case_save_error or "未知错误"
+            ret = QMessageBox.question(
+                self,
+                "保存案例笔记失败",
+                f"自动保存当前案例笔记失败：\n{msg}\n\n是否丢弃未保存更改？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            return ret == QMessageBox.Yes
+
         if not self.editor.document().isModified():
             return True
         ret = QMessageBox.question(
@@ -378,7 +393,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_archive(self):
-        """Bundle editor + result into a markdown report directory."""
+        """Bundle editor + result into markdown and HTML report files."""
         if self._archive_inputs_empty():
             return
         opts = ArchiveOptionsDialog(
@@ -396,7 +411,7 @@ class MainWindow(QMainWindow):
             default_dir = default_archive_dir()
         chosen, _ = QFileDialog.getSaveFileName(
             self,
-            "归档保存位置（选择目录名，archive.md 会写在其中）",
+            "归档保存位置（选择目录名，archive.md / archive.html 会写在其中）",
             str(default_dir),
             "归档目录 (*)",
         )
@@ -446,6 +461,14 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "归档失败", "未返回归档路径")
             return
         archive_md = worker_md[0]
+        archive_html = archive_md.with_suffix(".html")
+        if not archive_html.is_file():
+            QMessageBox.critical(
+                self,
+                "归档失败",
+                f"Markdown 已生成，但 HTML 汇总文件缺失:\n{archive_html}",
+            )
+            return
 
         redact_note = ""
         if do_redact:
@@ -470,29 +493,39 @@ class MainWindow(QMainWindow):
                     "\n✨ 已精炼为 TSG；原始组合内容见 archive.raw.md"
                 )
 
-        ret = QMessageBox.information(
-            self,
-            "归档完成",
-            f"已归档到:\n{archive_md}\n\n"
-            f"图片数: {len([p for p in images if p.is_file()])}\n"
+        html_url = QUrl.fromLocalFile(str(archive_html.resolve())).toString()
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowTitle("归档完成")
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        msg_box.setText(
+            "HTML 汇总已生成：<br>"
+            f'<a href="{_html.escape(html_url, quote=True)}">'
+            f"{_html.escape(str(archive_html))}</a><br><br>"
+            f"Markdown 副本：<br>{_html.escape(str(archive_md))}<br><br>"
+            f"图片数: {len([p for p in images if p.is_file()])}<br>"
             f"对话条数: {len(self.result.qa_pairs())}"
-            f"{redact_note}{tsg_note}\n\n"
-            "是否打开所在目录？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
+            f"{_html.escape(redact_note + tsg_note).replace(chr(10), '<br>')}"
+            "<br><br>是否打开所在目录？"
         )
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg_box.setDefaultButton(QMessageBox.Yes)
+        for label in msg_box.findChildren(QLabel):
+            label.setOpenExternalLinks(True)
+        ret = msg_box.exec()
         if ret == QMessageBox.Yes:
             try:
                 if os.name == "nt":
                     subprocess.Popen(
-                        ["explorer.exe", "/select,", str(archive_md)],
+                        ["explorer.exe", "/select,", str(archive_html)],
                         shell=False,
                     )
                 else:
                     subprocess.Popen(["xdg-open", str(archive_md.parent)])
             except Exception:  # noqa: BLE001
                 pass
-        msg = f"已归档: {archive_md}" + (" (已脱敏)" if do_redact else "")
+        msg = f"已归档 HTML: {archive_html}" + (" (已脱敏)" if do_redact else "")
         self.statusBar().showMessage(msg, 8000)
 
     # --- cloud archive (Wiki upload) ---------------------------------
@@ -668,11 +701,14 @@ class MainWindow(QMainWindow):
     # --- case follow-up ----------------------------------------------
 
     def _on_qa_ready(self, question: str, answer: str):
-        """Persist Q&A to the active case's chat log, if any."""
+        """Show the final answer and persist it to the active case log."""
         if self._current_case is None:
+            self.result.append_answer(question, answer)
             return
+
         try:
             self._current_case.append_qa(question, answer)
+            self.result.load_qa_history(self._current_case.read_qa())
         except Exception as e:  # noqa: BLE001
             self.statusBar().showMessage(
                 f"案例日志写入失败: {e}", 5000)
@@ -843,12 +879,13 @@ class MainWindow(QMainWindow):
             return
         case = self._current_case
         # Persist note before closing the window.
-        try:
-            self._save_case_note(silent=True)
-        except Exception as e:  # noqa: BLE001
+        if not self._save_case_note(silent=True):
+            msg = self._last_case_save_error or "未知错误"
             ret = QMessageBox.question(
                 self, "保存案例笔记失败",
-                f"保存笔记时出错：\n{e}\n\n仍要关闭窗口吗？",
+                f"保存笔记时出错：\n{msg}\n\n仍要关闭窗口吗？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if ret != QMessageBox.Yes:
                 return
@@ -1098,21 +1135,13 @@ class MainWindow(QMainWindow):
         # screenshots — which add image refs but no plain text — also
         # trigger autosave. Otherwise an image-only change would never
         # persist and the screenshot would be lost when switching cases.
-        try:
-            note_md = self.editor.document().toMarkdown()
-        except Exception:
-            try:
-                note_md = self.editor.toPlainText()
-            except Exception:
-                note_md = ""
-        import hashlib as _hashlib
-        note_hash = _hashlib.md5(note_md.encode("utf-8")).hexdigest()
+        note_hash = self._current_note_hash()
         if note_hash != self._autosave_last_note_hash:
-            try:
-                self._save_case_note(silent=True)
-                self._autosave_last_note_hash = note_hash
-            except Exception:
-                pass
+            if not self._save_case_note(silent=True):
+                self.statusBar().showMessage(
+                    f"自动保存案例笔记失败: {self._last_case_save_error}",
+                    8000,
+                )
 
         # 2) Autosave the result/QA log to result-snapshot.md
         try:
@@ -1133,10 +1162,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-    def _save_case_note(self, silent: bool = False):
+    def _current_note_hash(self) -> str:
+        try:
+            note_md = self.editor.document().toMarkdown()
+        except Exception:
+            try:
+                note_md = self.editor.toPlainText()
+            except Exception:
+                note_md = ""
+        return _hashlib.md5(note_md.encode("utf-8")).hexdigest()
+
+    def _save_case_note(self, silent: bool = False) -> bool:
         """Save current editor content into the active case's note.md."""
         if self._current_case is None:
-            return
+            return False
         try:
             pending = self.editor.pending_dir()
             save_document(
@@ -1148,12 +1187,17 @@ class MainWindow(QMainWindow):
                 self._current_case.attachments_dir)
             self.editor.document().setModified(False)
             self._current_case.touch()
+            self._autosave_last_note_hash = self._current_note_hash()
+            self._last_case_save_error = ""
             if not silent:
                 self.statusBar().showMessage(
                     f"已保存案例笔记: {self._current_case.note_path}", 4000)
+            return True
         except Exception as e:  # noqa: BLE001
+            self._last_case_save_error = str(e)
             if not silent:
                 QMessageBox.critical(self, "保存案例笔记失败", str(e))
+            return False
 
 
 def QInputDialog_get_text(parent, title: str, label: str,
