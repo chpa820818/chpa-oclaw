@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 import html
 import os
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -25,6 +26,11 @@ _LOG_FILE = (
     Path(os.environ.get("USERPROFILE", os.path.expanduser("~")))
     / "OneDrive - Microsoft" / "Documents" / "VS-Code-Workspace"
     / "copilot-temp" / "sessions" / "notepad-ui.log"
+)
+
+_FENCED_CODE_RE = re.compile(
+    r"(^[ \t]*(```+|~~~+)[^\n]*\n.*?^[ \t]*\2[ \t]*$)",
+    re.MULTILINE | re.DOTALL,
 )
 
 
@@ -332,14 +338,25 @@ body {{
         text = answer.strip()
         if not text:
             return "<p><em>（无内容）</em></p>"
-        # Escape raw HTML first so Copilot output cannot inject arbitrary tags,
-        # while Markdown syntax is still rendered into readable HTML.
-        safe_markdown = html.escape(text, quote=False)
+        safe_markdown = ResultPane._safe_markdown_for_html(text)
         return _markdown_to_html(
             safe_markdown,
             extensions=["extra", "sane_lists", "nl2br", "tables", "fenced_code"],
             output_format="html5",
         )
+
+    @staticmethod
+    def _safe_markdown_for_html(text: str) -> str:
+        """Escape raw HTML without double-escaping fenced code blocks."""
+        text = html.unescape(text)
+        parts: list[str] = []
+        pos = 0
+        for match in _FENCED_CODE_RE.finditer(text):
+            parts.append(html.escape(text[pos:match.start()], quote=False))
+            parts.append(match.group(0))
+            pos = match.end()
+        parts.append(html.escape(text[pos:], quote=False))
+        return "".join(parts)
 
     def _scroll_to_bottom(self, seq: int | None = None) -> None:
         self._scroll_to_bottom_now(seq)
