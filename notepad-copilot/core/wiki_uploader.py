@@ -161,6 +161,39 @@ def get_page_etag(profile: WikiProfile, token: str,
     return None
 
 
+def get_page_path_by_id(profile: WikiProfile, token: str,
+                        page_id: str) -> str | None:
+    """Return the real full path of a wiki page given its numeric id.
+
+    Friendly ADO Wiki URLs (``/_wiki/wikis/<wiki>/<id>/<slug>``) only carry
+    the page id plus the leaf slug; the slug loses ancestors and encodes
+    special characters, so it cannot be turned back into the page's path by
+    string munging. The page id, however, uniquely identifies the page, and
+    the REST API returns its authoritative ``path``.
+    """
+    if not page_id:
+        return None
+    url = (
+        f"{_api_base(profile)}/pages/{urllib.parse.quote(str(page_id), safe='')}"
+        f"?api-version={profile.api_version}"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    code, _hdrs, body = _request(
+        "GET", url, headers=headers, body=None, timeout=30,
+    )
+    if code == 200:
+        try:
+            data = json.loads(body.decode("utf-8", errors="replace"))
+            path = data.get("path")
+            return path or None
+        except Exception:
+            return None
+    return None
+
+
 def put_page(profile: WikiProfile, token: str,
              page_path: str, content: str) -> tuple[int, str]:
     """Create or update a wiki page. Returns (status_code, body_str)."""

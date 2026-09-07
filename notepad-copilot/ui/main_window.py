@@ -56,6 +56,7 @@ from ui.az_bar import AzAccountBar
 from ui.chat_pane import ChatPane
 from ui.cloud_archive_dialog import CloudArchiveDialog
 from ui.editor_pane import EditorPane
+from ui.find_bar import FindBar
 from ui.result_pane import ResultPane
 from ui.wiki_settings import WikiSettingsDialog
 
@@ -142,10 +143,22 @@ class MainWindow(QMainWindow):
         # Default click = files multi-select (most common)
         self._btn_upload.clicked.connect(self._on_upload_files)
 
+        editor_body = QWidget()
+        editor_layout = QVBoxLayout(editor_body)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(0)
+        self.editor_find = FindBar(self.editor, editor_body)
+        editor_layout.addWidget(self.editor_find)
+        editor_layout.addWidget(self.editor, 1)
+        self._btn_find = QToolButton()
+        self._btn_find.setText("查找")
+        self._btn_find.setToolTip("查找笔记 (Ctrl+F)")
+        self._btn_find.clicked.connect(self.editor_find.open_search)
+
         editor_card = _wrap_in_card(
-            self.editor, "📝  笔记",
+            editor_body, "📝  笔记",
             "支持文本 + 截图 + 日志 (Ctrl+V / 拖拽 / 📎 上传)",
-            header_widgets=[self._btn_upload],
+            header_widgets=[self._btn_find, self._btn_upload],
         )
 
         # Top: editor (left) | result (right)
@@ -198,7 +211,11 @@ class MainWindow(QMainWindow):
             lambda: self._on_chat_busy("Copilot 思考中…", True)
         )
         self.chat.runner.process_finished.connect(
-            lambda code: self._on_chat_busy("", False)
+            lambda code: self._on_chat_busy(
+                "Copilot 已停止" if code == -2 else
+                "Copilot 执行失败" if code else "Copilot 已完成",
+                False,
+            )
         )
         self.statusBar().showMessage("就绪")
 
@@ -223,7 +240,7 @@ class MainWindow(QMainWindow):
         if busy:
             self.statusBar().showMessage(f"💭 {msg}")
         else:
-            self.statusBar().showMessage("Copilot 已完成", 2000)
+            self.statusBar().showMessage(msg or "Copilot 已完成", 2000)
 
     # --- menu ---------------------------------------------------------
 
@@ -576,6 +593,41 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+        # If the pasted URL pointed at a specific page, that page's id is the
+        # only reliable handle — its friendly-URL slug loses ancestors and
+        # encodes special chars (e.g. '&'), so the inferred parent path can be
+        # wrong and the upload lands at the wiki root. Resolve the page's REAL
+        # path via the API and re-anchor the new page under it as a sub-page.
+        page_id = getattr(dlg, "page_id", "")
+        page_name = getattr(dlg, "page_name", "")
+        if page_id and page_name:
+            try:
+                from core.wiki_uploader import (
+                    get_access_token,
+                    get_page_path_by_id,
+                )
+                self.statusBar().showMessage("☁ 正在解析父页面真实路径…")
+                token = get_access_token()
+                real_parent = get_page_path_by_id(profile, token, page_id)
+                if real_parent:
+                    page_path = real_parent.rstrip("/") + "/" + page_name
+                else:
+                    QMessageBox.warning(
+                        self, "无法解析父页面",
+                        "未能通过 URL 中的页面 ID 找到对应的 Wiki 页面"
+                        f"（page id={page_id}）。\n\n"
+                        f"将使用根据 URL 推断的路径：\n{page_path}\n\n"
+                        "如结果不在期望的父页面下，请改用页面右上角"
+                        "「Copy page path」得到的链接，或在父路径中手动填写"
+                        "完整路径。",
+                    )
+            except Exception as e:  # noqa: BLE001
+                QMessageBox.warning(
+                    self, "解析父页面失败",
+                    f"解析父页面真实路径时出错，将使用推断路径：\n{page_path}"
+                    f"\n\n{e}",
+                )
+
         # Archive options (TSG default ON for cloud, redact forced ON)
         opts = ArchiveOptionsDialog(
             self, title="云端归档选项", cloud_mode=True,
@@ -695,7 +747,7 @@ class MainWindow(QMainWindow):
         if not self._confirm_discard():
             event.ignore()
             return
-        self.chat.runner.stop()
+        self.chat.runner.shutdown()
         super().closeEvent(event)
 
     # --- case follow-up ----------------------------------------------
@@ -1067,13 +1119,7 @@ class MainWindow(QMainWindow):
 
         # 1. Reset Copilot session so we don't carry stale memory
         try:
-            self.chat.runner.reset_session()
-            self.chat.output.clear()
-            try:
-                self.chat._sent_image_keys.clear()
-                self.chat._last_note_hash = ""
-            except Exception:
-                pass
+            self.chat.reset_session()
         except Exception as e:  # noqa: BLE001
             errors.append(f"重置会话: {e}")
 

@@ -43,6 +43,11 @@ class CloudArchiveDialog(QDialog):
         self.parent_path: str = ""
         self.page_name: str = ""
         self.page_path: str = ""
+        # Numeric page id parsed from a friendly Wiki URL (if any). When
+        # present, the caller should resolve the page's *real* path from
+        # this id rather than trusting parent_path, which is only inferred
+        # from the URL slug and loses ancestors / encodes special chars.
+        self.page_id: str = ""
 
         self._default_page_name = default_page_name or "归档"
 
@@ -140,6 +145,11 @@ class CloudArchiveDialog(QDialog):
         proj = parsed.get("project", "")
         wiki = parsed.get("wiki_identifier", "")
         parent = parsed.get("parent_path", "")
+        # Whether the URL targets a specific page (has a numeric page id).
+        # If so, the upload step resolves that page's real path via the API
+        # and anchors the new page under it, so the inferred parent below is
+        # only a best-effort preview.
+        self._url_page_id = parsed.get("page_id", "")
         self.org_label.setText(org or "(待解析)")
         self.project_label.setText(proj or "(待解析)")
         self.wiki_label.setText(wiki or "(待解析)")
@@ -174,7 +184,13 @@ class CloudArchiveDialog(QDialog):
             return
         path = (parent.rstrip("/") + "/" + name) if parent != "/" \
             else "/" + name
-        self.preview_label.setText(f"最终页面路径：{path}")
+        if getattr(self, "_url_page_id", ""):
+            self.preview_label.setText(
+                f"最终页面路径：上传时按 URL 页面(ID={self._url_page_id})"
+                f"的真实路径定位 → 其子页 “{name}”"
+            )
+        else:
+            self.preview_label.setText(f"最终页面路径：{path}")
         # Ok requires a fully-parsed wiki target
         ok = bool(self.org_label.text().startswith("http")
                   and self.project_label.text() not in ("", "(待解析)")
@@ -223,4 +239,5 @@ class CloudArchiveDialog(QDialog):
         self.parent_path = parent
         self.page_name = name
         self.page_path = page_path
+        self.page_id = parsed.get("page_id", "")
         self.accept()

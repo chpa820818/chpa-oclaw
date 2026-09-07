@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Detects and installs (via winget):
-      - Python 3.10+
+      - Python 3.11+
       - Node.js LTS (for GitHub Copilot CLI)
       - GitHub Copilot CLI (@github/copilot, npm global)
       - Azure CLI (optional, -SkipAzureCli to skip)
@@ -107,7 +107,7 @@ function Find-RealPython {
             $ver = (& $exe -c "import sys;print('%d.%d' % sys.version_info[:2])") 2>$null
             if ($ver) {
                 $maj,$min = $ver.Trim().Split('.')
-                if ([int]$maj -gt 3 -or ([int]$maj -eq 3 -and [int]$min -ge 10)) {
+                if ([int]$maj -gt 3 -or ([int]$maj -eq 3 -and [int]$min -ge 11)) {
                     return [pscustomobject]@{ Exe = $exe; Version = $ver.Trim() }
                 }
             }
@@ -138,7 +138,7 @@ Write-Host "Tool directory: $ToolDir`n"
 
 # ---------- 1. Python ---------------------------------------------------
 
-Write-Step "Detecting Python (>= 3.10) ..."
+Write-Step "Detecting Python (>= 3.11) ..."
 $py = Find-RealPython
 if (-not $py) {
     Write-Warn2 "No suitable Python found. Installing Python 3.12 via winget..."

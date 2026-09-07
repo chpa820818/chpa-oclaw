@@ -18,7 +18,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 `install.ps1` 会自动：
 
-1. 检测 / 安装 Python 3.10+（缺失时通过 `winget` 装 Python 3.12）
+1. 检测 / 安装 Python 3.11+（缺失时通过 `winget` 装 Python 3.12）
 2. 检测 / 安装 Node.js LTS + GitHub Copilot CLI (`npm i -g @github/copilot`)
 3. 检测 / 安装 Azure CLI（`-SkipAzureCli` 可跳过）
 4. 在工具目录创建 `.venv` 虚拟环境并安装 PySide6 等依赖
@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 | 项目 | 要求 |
 | --- | --- |
 | 操作系统 | Windows 10 / 11（PowerShell 5+ 或 7+） |
-| Python | **3.10 +**（推荐 3.12） |
+| Python | **3.11+**（推荐 3.12；3.10 仅支持传统模式） |
 | GitHub Copilot CLI | `copilot` 命令需在 `PATH` 中 |
 | Git | 仅在使用云端归档（Azure DevOps Wiki）时需要 |
 | Azure CLI | 仅当使用云端归档/账户切换功能时需要 |
@@ -76,7 +76,7 @@ cd "C:\Users\<你的用户名>\OneDrive - Microsoft\Documents\VS-Code-Workspace\
 验证：
 
 ```powershell
-python --version           # 应显示 3.10 或更高
+python --version           # 插嘴功能需要 3.11 或更高
 python -c "import sys; print(sys.executable)"
 ```
 
@@ -101,6 +101,7 @@ pip install -r requirements.txt
 ```
 PySide6>=6.6
 markdown>=3.5
+github-copilot-sdk==1.0.11; python_version >= "3.11"
 ```
 
 如使用绝对路径的 Python，请用对应的 pip：
@@ -123,8 +124,17 @@ copilot --help | Select-String "session|resume"
 ```
 
 首次运行 `copilot` 会弹出登录流程（浏览器认证）。
-工具内部使用 `--name <session>` / `--resume=<session>` 来隔离每个窗口的会话，
-请确保 Copilot CLI 版本支持这两个参数（一般 v1.0+ 都支持）。
+默认开启「运行中插嘴」：SDK 为每窗口创建独立 UUID 会话，复用 CLI 已登录账户。
+任务进行中可以输入新要求，按 Enter 或点击「补充要求」发送；界面显示提交和接收状态。
+补充在下一次模型请求前生效，若本轮已结束则接续下一轮，不会撤销已执行操作。
+
+关闭该选项使用传统 `--name <session>` / `--resume=<session>` 模式，
+不支持运行中追加。切换模式会重置 AI 会话，不删除笔记或已归档结果。
+
+实时模式优先使用已完整安装的最新缓存运行时（本机已接通 CLI 1.0.84-1），
+不以旧 npm 引导包的版本作为当前 CLI 版本。若握手或任务完成检查报版本不兼容，
+先更新 CLI；也可将 `NOTEPAD_COPILOT_RUNTIME` 设置为已安装的 `index.js` / 原生 `.exe` 绝对路径。
+不要将它设置为 VS Code 的 `.ps1` / `.bat` 引导脚本。
 
 ---
 

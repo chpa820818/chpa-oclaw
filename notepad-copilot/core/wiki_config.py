@@ -86,8 +86,13 @@ def parse_wiki_url(url: str) -> dict:
     # 2) /{pageId}/{slug}/{slug}/...  after wiki name
     if wiki_idx >= 0 and wiki_idx + 1 < len(parts):
         tail = parts[wiki_idx + 1:]
-        # First segment is page id (numeric); skip it
+        # First segment is the page id (numeric). It is the ONLY reliable
+        # identifier of the page in a friendly ADO Wiki URL — the slug that
+        # follows is just the leaf page's title with special chars encoded
+        # and ancestors omitted, so it cannot be trusted as a full path.
+        # Callers should resolve the real path via the API using page_id.
         if tail and tail[0].isdigit():
+            out["page_id"] = tail[0]
             tail = tail[1:]
         if tail:
             # Slugs: dashes commonly replace spaces; URL-decode each

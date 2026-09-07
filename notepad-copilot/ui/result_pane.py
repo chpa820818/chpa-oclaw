@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from markdown import markdown as _markdown_to_html
+from ui.find_bar import FindBar
 
 
 _LOG_FILE = (
@@ -66,6 +67,9 @@ class ResultPane(QWidget):
         self.subtitle.setObjectName("FieldLabel")
         bar.addWidget(self.subtitle)
         bar.addStretch(1)
+        self.find_btn = QPushButton("查找")
+        self.find_btn.setToolTip("查找结果 (Ctrl+F)")
+        bar.addWidget(self.find_btn)
         self.archive_btn = QPushButton("📦  本地归档")
         self.archive_btn.setProperty("accent", True)
         self.archive_btn.setToolTip(
@@ -88,6 +92,9 @@ class ResultPane(QWidget):
         self.view.setFrameShape(QTextBrowser.NoFrame)
         self.view.setLineWrapMode(QTextEdit.WidgetWidth)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.find_bar = FindBar(self.view, self)
+        self.find_btn.clicked.connect(self.find_bar.open_search)
+        layout.addWidget(self.find_bar)
         layout.addWidget(self.view, 1)
 
         self._md_parts: list[str] = []
@@ -368,6 +375,8 @@ body {{
 
     def _scroll_to_bottom_now(self, seq: int | None = None) -> None:
         if seq is not None and seq != self._render_seq:
+            return
+        if self.find_bar.active:
             return
         cursor = self.view.textCursor()
         cursor.movePosition(QTextCursor.End)

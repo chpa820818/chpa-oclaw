@@ -36,6 +36,10 @@ _LOG_FILE = (
 )
 
 _PROMPT_FILE_THRESHOLD = 12000
+_SESSION_NOT_FOUND_RE = re.compile(
+    r"No session, task, or name matched\b",
+    re.IGNORECASE,
+)
 
 
 def _log(msg: str) -> None:
@@ -192,11 +196,15 @@ class CopilotRunner(QObject):
         self._prompt_file: Path | None = None
         self._last_output: str = ""
         self._stdin_lock = threading.Lock()
-        # First send is a fresh session; subsequent sends use --resume=<name>.
+        # Only completed runs count. Popen succeeding does not mean the CLI
+        # actually created the named session.
         self._sent_in_session: int = 0
+        self._active_resume: bool = False
         # Unique per-runner session name so multiple windows / runners don't
         # collide via Copilot CLI's global "most-recent session" pointer.
         self._session_name: str = self._new_session_name()
+        self._model: str | None = None
+        self._reasoning_effort: str | None = None
         self._program, self._prefix_args = _resolve_launcher()
         _log(
             f"=== CopilotRunner init === program={self._program!r} "
@@ -210,7 +218,8 @@ class CopilotRunner(QObject):
     # --- lifecycle -----------------------------------------------------
 
     def is_running(self) -> bool:
-        return self._popen is not None and self._popen.poll() is None
+        # Include the interval between process exit and queued Qt completion.
+        return self._popen is not None
 
     def stop(self):
         if self._popen is None:
@@ -234,31 +243,32 @@ class CopilotRunner(QObject):
 
     # --- send ----------------------------------------------------------
 
-    def send(self, prompt: str, attachments: list | None = None):
+    def send(self, prompt: str, attachments: list | None = None) -> bool:
         if not prompt.strip():
-            return
+            self.error_occurred.emit("请输入消息后再发送。")
+            return False
         if self._program is None:
             self.error_occurred.emit(
                 "Copilot CLI 未找到。请确保 `copilot` 在 PATH 中。"
             )
-            return
+            return False
         if self.is_running():
             self.error_occurred.emit(
                 "上一条请求仍在运行中，请等待完成或点击 [停止] 后再发送。"
             )
-            return
+            return False
 
         prompt = _sanitize_prompt(prompt)
         attachments = [str(p) for p in (attachments or [])]
 
         resume = self._sent_in_session > 0
-        if self._spawn(prompt, resume=resume, attachments=attachments):
-            self._sent_in_session += 1
+        return self._spawn(prompt, resume=resume, attachments=attachments)
 
     def reset_session(self):
         """Drop session continuity so the next send starts fresh."""
         self.stop()
         self._sent_in_session = 0
+        self._active_resume = False
         # New session name so we don't accidentally re-resume the old one.
         self._session_name = self._new_session_name()
         _log(f"reset_session: new name={self._session_name!r}")
@@ -266,6 +276,16 @@ class CopilotRunner(QObject):
     def has_session_history(self) -> bool:
         """True if at least one prompt has been sent since last reset."""
         return self._sent_in_session > 0
+
+    def set_model(self, model: str | None,
+                  reasoning_effort: str | None = None) -> None:
+        """Set explicit model options for subsequent CLI invocations."""
+        self._model = model or None
+        self._reasoning_effort = reasoning_effort or None
+        _log(
+            f"model selection: model={self._model!r} "
+            f"effort={self._reasoning_effort!r}"
+        )
 
     def last_output(self) -> str:
         """Return the complete stdout collected for the most recent run."""
@@ -276,12 +296,18 @@ class CopilotRunner(QObject):
     def _spawn(self, prompt: str, resume: bool,
                attachments: list[str] | None = None) -> bool:
         self.stop()
+        self._active_resume = resume
+        self._last_output = ""
         # --allow-all = --allow-all-tools + --allow-all-paths + --allow-all-urls
         # Path permission matters when the model needs to read files
         # outside the current working directory (e.g. skill folders in
         # OneDrive). Without --allow-all-paths, copilot would prompt
         # for confirmation, which fails in our non-TTY subprocess.
         extra: list[str] = ["--allow-all"]
+        if self._model:
+            extra.extend(["--model", self._model])
+        if self._reasoning_effort:
+            extra.extend(["--reasoning-effort", self._reasoning_effort])
         if resume:
             extra.append(f"--resume={self._session_name}")
         else:
@@ -323,12 +349,18 @@ class CopilotRunner(QObject):
 
     def _start_threads(self, popen: subprocess.Popen):
         reader = _ReaderThread(popen.stdout, self)
-        reader.chunk.connect(self.output_received)
+        reader.chunk.connect(
+            lambda text: self.output_received.emit(text)
+            if self._popen is popen else None
+        )
         self._reader = reader
         reader.start()
 
         waiter = _WaiterThread(popen, self)
-        waiter.done.connect(self._on_finished)
+        waiter.done.connect(
+            lambda code: self._on_finished(code)
+            if self._popen is popen else None
+        )
         self._waiter = waiter
         waiter.start()
 
@@ -370,8 +402,23 @@ class CopilotRunner(QObject):
         if self._reader is not None:
             self._reader.wait(2000)
             self._last_output = self._reader.text()
-        self.process_finished.emit(int(code))
+        if code == 0:
+            self._sent_in_session += 1
+        elif not self._active_resume or _SESSION_NOT_FOUND_RE.search(
+            self._last_output
+        ):
+            # A failed fresh run may never have created its named session.
+            # A missing resumed session may have been removed externally.
+            # In both cases the next send must start a genuinely new session.
+            self._sent_in_session = 0
+            self._session_name = self._new_session_name()
+            _log(
+                "session unavailable after failed run; "
+                f"new name={self._session_name!r}"
+            )
+        self._active_resume = False
         self._popen = None
         self._reader = None
         self._waiter = None
         self._cleanup_prompt_file()
+        self.process_finished.emit(int(code))
