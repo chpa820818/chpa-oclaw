@@ -1,0 +1,23 @@
+{
+  "project": "Notepad Copilot",
+  "version": "v0.1.3",
+  "ui_language": "English",
+  "build": "Local English UI preview",
+  "video_duration_seconds": 97.021333,
+  "video_bytes": 2978712,
+  "resolution": [
+    1920,
+    1080
+  ],
+  "narration": "English / offline synthetic voice",
+  "disclosure": "Illustrated walkthrough using real application UI with synthetic case data and simulated responses.",
+  "scene_durations_seconds": [
+    11.666666666666666,
+    15.708333333333334,
+    12.333333333333334,
+    11.791666666666666,
+    17.291666666666668,
+    13.0,
+    15.208333333333334
+  ]
+}

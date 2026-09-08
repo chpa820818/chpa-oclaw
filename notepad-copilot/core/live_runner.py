@@ -399,12 +399,12 @@ class LiveCopilotRunner(QObject):
                 delivery = getattr(delivery, "value", delivery)
                 if delivery == "steering":
                     self._notify(
-                        "info_received", "运行时已将补充消息加入当前任务。",
+                        "info_received", "The runtime added your message to the current task.",
                         generation=generation,
                     )
                 elif delivery == "queued":
                     self._notify(
-                        "info_received", "消息已进入同一会话的后续一轮。",
+                        "info_received", "Your message will continue in a later turn of the same session.",
                         generation=generation,
                     )
             if kind == "assistant.message" and root:

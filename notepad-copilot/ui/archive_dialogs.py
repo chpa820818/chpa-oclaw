@@ -19,33 +19,35 @@ class ArchiveOptionsDialog(QDialog):
         self,
         parent=None,
         *,
-        title: str = "归档选项",
+        title: str = "Archive Options",
         cloud_mode: bool = False,
         default_redact: bool = True,
         default_refine: bool = True,
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(520, 320)
+        self.resize(620, 340)
 
         layout = QVBoxLayout(self)
 
         intro = QLabel(
-            f"将笔记区 + 结果区整合为 Markdown + HTML 报告"
-            f"{'并上传到 Wiki' if cloud_mode else ''}。"
+            f"Combine notes and results into Markdown and HTML reports"
+            f"{' and upload to Wiki' if cloud_mode else ''}."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
         # --- Redaction ---
         self.redact_chk = QCheckBox(
-            "🔒 数据脱敏（GUID / 订阅 ID / 资源名 / 邮箱 / IP / 密钥）"
+            "🔒 Redact sensitive data"
         )
         self.redact_chk.setChecked(default_redact)
         layout.addWidget(self.redact_chk)
         redact_hint = QLabel(
-            "    原值映射保存到归档目录的 `redact_map.json`，请勿外发。"
+            "Redacts GUIDs, subscription IDs, resource names, emails, IPs and keys.\n"
+            "Original values are saved in redact_map.json. Keep this file private."
         )
+        redact_hint.setWordWrap(True)
         redact_hint.setStyleSheet("color: #656d76; padding-left: 4px;")
         layout.addWidget(redact_hint)
 
@@ -54,22 +56,22 @@ class ArchiveOptionsDialog(QDialog):
             self.redact_chk.setEnabled(False)
             self.redact_chk.setChecked(True)
             cloud_hint = QLabel(
-                "    （云端归档强制脱敏；不可关闭）"
+                "    Redaction is required for cloud archives."
             )
             cloud_hint.setStyleSheet("color: #cf222e; padding-left: 4px;")
             layout.addWidget(cloud_hint)
 
         # --- TSG refinement ---
         self.refine_chk = QCheckBox(
-            "✨ 用 Copilot 精炼为 Troubleshooting Guide (TSG) 样式"
+            "✨ Refine into a Troubleshooting Guide (TSG) with Copilot"
         )
         self.refine_chk.setChecked(default_refine)
         layout.addWidget(self.refine_chk)
         refine_hint = QLabel(
-            "    自动调用本地 copilot CLI 把原始记录改写成 TSG（含\"现象 / 影响 / "
-            "排查 / 根因 / 缓解 / 验证\"等小节），\n"
-            "    并保留有价值的截图引用。原始组合内容会另存为 `archive.raw.md`。\n"
-            "    精炼过程会调用一次 Copilot（约 30s ~ 2min）。"
+            "Uses the local Copilot CLI to organize records into symptom, impact, "
+            "investigation, root cause, mitigation and verification sections.\n"
+            "Relevant screenshots are retained. Original content is saved as archive.raw.md.\n"
+            "Refinement makes one Copilot request (about 30 seconds to 2 minutes)."
         )
         refine_hint.setStyleSheet("color: #656d76; padding-left: 4px;")
         refine_hint.setWordWrap(True)
@@ -80,9 +82,9 @@ class ArchiveOptionsDialog(QDialog):
         btns = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
-        btns.button(QDialogButtonBox.Ok).setText("继续")
+        btns.button(QDialogButtonBox.Ok).setText("Continue")
         btns.button(QDialogButtonBox.Ok).setProperty("accent", True)
-        btns.button(QDialogButtonBox.Cancel).setText("取消")
+        btns.button(QDialogButtonBox.Cancel).setText("Cancel")
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
@@ -120,9 +122,9 @@ class ArchiveWorker(QThread):
 class ArchiveProgressDialog(QDialog):
     """Indeterminate progress while ArchiveWorker runs."""
 
-    def __init__(self, parent=None, *, message: str = "正在归档…"):
+    def __init__(self, parent=None, *, message: str = "Archiving…"):
         super().__init__(parent)
-        self.setWindowTitle("处理中")
+        self.setWindowTitle("Processing")
         self.setModal(True)
         self.setWindowFlag(Qt.WindowCloseButtonHint, False)
         self.resize(420, 130)
@@ -134,7 +136,7 @@ class ArchiveProgressDialog(QDialog):
         bar.setRange(0, 0)
         layout.addWidget(bar)
         hint = QLabel(
-            "TSG 精炼会调用一次 Copilot（约 30s ~ 2min），请稍候。"
+            "TSG refinement makes one Copilot request (about 30 seconds to 2 minutes). Please wait."
         )
         hint.setStyleSheet("color: #656d76;")
         hint.setWordWrap(True)

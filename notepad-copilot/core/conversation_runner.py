@@ -56,7 +56,7 @@ class ConversationRunner(QObject):
         if enabled == self._live_mode:
             return True
         if self.is_running():
-            self.error_occurred.emit("请先停止当前任务，再切换会话模式。")
+            self.error_occurred.emit("Stop the current task before switching session modes.")
             return False
         self.reset_session()
         self._live_mode = enabled
@@ -71,7 +71,7 @@ class ConversationRunner(QObject):
     def submit(self, request_id: str, prompt: str,
                attachments: list | None = None) -> bool:
         if self._closing:
-            self.message_rejected.emit(request_id, "窗口正在关闭。")
+            self.message_rejected.emit(request_id, "The window is closing.")
             return False
         if self._live_mode:
             if self._live is None:
@@ -90,7 +90,7 @@ class ConversationRunner(QObject):
             return True
         self.message_rejected.emit(
             request_id,
-            "传统模式未能发送；运行中追加要求需要开启「运行中插嘴」。",
+            "Could not send in legacy mode. Enable Live input to add requests while running.",
         )
         return False
 

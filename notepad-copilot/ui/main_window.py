@@ -84,6 +84,7 @@ def _wrap_in_card(inner: QWidget, title_text: str,
     bar.addWidget(title)
     if subtitle_text:
         sub = QLabel(subtitle_text)
+        sub.setWordWrap(True)
         sub.setObjectName("FieldLabel")
         bar.addWidget(sub)
     bar.addStretch(1)
@@ -125,19 +126,19 @@ class MainWindow(QMainWindow):
 
         # 📎 Upload button placed inside the editor card header.
         self._btn_upload = QToolButton()
-        self._btn_upload.setText("📎  上传…")
+        self._btn_upload.setText("📎  Upload…")
         self._btn_upload.setToolTip(
-            "上传日志/文件/文件夹到当前案例\n"
-            "也可直接拖拽文件或文件夹到笔记区"
+            "Attach logs, files or folders to this case.\n"
+            "You can also drop files or folders into the notes pane."
         )
         self._btn_upload.setPopupMode(QToolButton.MenuButtonPopup)
         upload_menu = QMenu(self._btn_upload)
-        act_upload_files = upload_menu.addAction("上传文件… (可多选)")
+        act_upload_files = upload_menu.addAction("Upload Files… (multiple)")
         act_upload_files.triggered.connect(self._on_upload_files)
-        act_upload_folder = upload_menu.addAction("上传文件夹… (递归)")
+        act_upload_folder = upload_menu.addAction("Upload Folder… (recursive)")
         act_upload_folder.triggered.connect(self._on_upload_folder)
         act_upload_mixed = upload_menu.addAction(
-            "上传混合内容… (文件 + 文件夹)")
+            "Upload Mixed Content… (files and folders)")
         act_upload_mixed.triggered.connect(self._on_upload_mixed)
         self._btn_upload.setMenu(upload_menu)
         # Default click = files multi-select (most common)
@@ -151,13 +152,13 @@ class MainWindow(QMainWindow):
         editor_layout.addWidget(self.editor_find)
         editor_layout.addWidget(self.editor, 1)
         self._btn_find = QToolButton()
-        self._btn_find.setText("查找")
-        self._btn_find.setToolTip("查找笔记 (Ctrl+F)")
+        self._btn_find.setText("Find")
+        self._btn_find.setToolTip("Find in notes (Ctrl+F)")
         self._btn_find.clicked.connect(self.editor_find.open_search)
 
         editor_card = _wrap_in_card(
-            editor_body, "📝  笔记",
-            "支持文本 + 截图 + 日志 (Ctrl+V / 拖拽 / 📎 上传)",
+            editor_body, "📝  Notes",
+            "Text · screenshots · logs (paste, drop or upload)",
             header_widgets=[self._btn_find, self._btn_upload],
         )
 
@@ -204,20 +205,20 @@ class MainWindow(QMainWindow):
         self.result.archive_btn.clicked.connect(self._on_archive)
         self.result.cloud_btn.clicked.connect(self._on_cloud_archive)
         self.az_bar.account_changed.connect(
-            lambda: self.statusBar().showMessage("Azure 账户已更新", 3000)
+            lambda: self.statusBar().showMessage("Azure account updated", 3000)
         )
         self.az_bar.busy_changed.connect(self._on_az_busy)
         self.chat.runner.process_started.connect(
-            lambda: self._on_chat_busy("Copilot 思考中…", True)
+            lambda: self._on_chat_busy("Copilot is thinking…", True)
         )
         self.chat.runner.process_finished.connect(
             lambda code: self._on_chat_busy(
-                "Copilot 已停止" if code == -2 else
-                "Copilot 执行失败" if code else "Copilot 已完成",
+                "Copilot stopped" if code == -2 else
+                "Copilot task failed" if code else "Copilot finished",
                 False,
             )
         )
-        self.statusBar().showMessage("就绪")
+        self.statusBar().showMessage("Ready")
 
         # Auto-save: only saves when a case is open
         self._autosave_last_note_hash: str = ""
@@ -233,14 +234,14 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"⏳ {msg}")
             self.setWindowTitle(f"⏳ {msg} - Notepad + Copilot")
         else:
-            self.statusBar().showMessage("就绪", 2000)
+            self.statusBar().showMessage("Ready", 2000)
             self._update_title()
 
     def _on_chat_busy(self, msg: str, busy: bool):
         if busy:
             self.statusBar().showMessage(f"💭 {msg}")
         else:
-            self.statusBar().showMessage(msg or "Copilot 已完成", 2000)
+            self.statusBar().showMessage(msg or "Copilot finished", 2000)
 
     # --- menu ---------------------------------------------------------
 
@@ -248,17 +249,17 @@ class MainWindow(QMainWindow):
         m = self.menuBar()
 
         # Three top-level menu-bar actions (no submenus): 新建 / 打开 / 关闭。
-        act_new_case = QAction("📂  新建案例", self,
+        act_new_case = QAction("📂  New Case", self,
                                shortcut=QKeySequence("Ctrl+Shift+N"))
         act_new_case.triggered.connect(self._on_new_case)
         m.addAction(act_new_case)
 
-        act_open_case = QAction("📁  打开案例", self,
+        act_open_case = QAction("📁  Open Case", self,
                                 shortcut=QKeySequence("Ctrl+Shift+O"))
         act_open_case.triggered.connect(self._on_open_case)
         m.addAction(act_open_case)
 
-        act_close_case = QAction("✖  关闭案例", self,
+        act_close_case = QAction("✖  Close Case", self,
                                  shortcut=QKeySequence("Ctrl+Shift+W"))
         act_close_case.triggered.connect(self._on_close_case)
         m.addAction(act_close_case)
@@ -282,7 +283,7 @@ class MainWindow(QMainWindow):
         if not self._confirm_discard():
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "打开 Markdown", "", "Markdown (*.md *.markdown);;All Files (*)"
+            self, "Open Markdown", "", "Markdown (*.md *.markdown);;All Files (*)"
         )
         if not path:
             return
@@ -290,12 +291,12 @@ class MainWindow(QMainWindow):
         try:
             load_document(p, self.editor.document())
         except Exception as e:
-            QMessageBox.critical(self, "打开失败", str(e))
+            QMessageBox.critical(self, "Open Failed", str(e))
             return
         self._current_path = p
         self.editor.set_attachments_dir(attachments_dir_for(p))
         self._update_title()
-        self.statusBar().showMessage(f"已打开 {p}", 5000)
+        self.statusBar().showMessage(f"Opened {p}", 5000)
 
     def _save_file(self):
         # Case mode: always save to the case's note.md (no dialog)
@@ -308,7 +309,7 @@ class MainWindow(QMainWindow):
             self._do_save(self._current_path)
             self.editor.document().setModified(False)
             self.statusBar().showMessage(
-                f"已保存到 {self._current_path}", 4000)
+                f"Saved to {self._current_path}", 4000)
             return
         if self._current_path is None:
             return self._save_file_as()
@@ -323,7 +324,7 @@ class MainWindow(QMainWindow):
 
     def _save_file_as(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "另存为 Markdown", "note.md",
+            self, "Save Markdown As", "note.md",
             "Markdown (*.md);;All Files (*)"
         )
         if not path:
@@ -339,13 +340,13 @@ class MainWindow(QMainWindow):
             save_document(self.editor.document(), p,
                           pending_attachments_dir=pending)
         except Exception as e:
-            QMessageBox.critical(self, "保存失败", str(e))
+            QMessageBox.critical(self, "Save Failed", str(e))
             return
         self._current_path = p
         self.editor.set_attachments_dir(attachments_dir_for(p))
         self.editor.document().setModified(False)
         self._update_title()
-        self.statusBar().showMessage(f"已保存到 {p}", 5000)
+        self.statusBar().showMessage(f"Saved to {p}", 5000)
 
     # --- helpers ------------------------------------------------------
 
@@ -353,11 +354,11 @@ class MainWindow(QMainWindow):
         if self._current_case is not None and self.editor.document().isModified():
             if self._save_case_note(silent=True):
                 return True
-            msg = self._last_case_save_error or "未知错误"
+            msg = self._last_case_save_error or "Unknown error"
             ret = QMessageBox.question(
                 self,
-                "保存案例笔记失败",
-                f"自动保存当前案例笔记失败：\n{msg}\n\n是否丢弃未保存更改？",
+                "Case Note Save Failed",
+                f"Could not autosave the current case notes:\n{msg}\n\nDiscard unsaved changes?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -366,7 +367,7 @@ class MainWindow(QMainWindow):
         if not self.editor.document().isModified():
             return True
         ret = QMessageBox.question(
-            self, "未保存", "当前笔记未保存，是否丢弃？",
+            self, "Unsaved Notes", "Discard the unsaved changes to your notes?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         return ret == QMessageBox.Yes
@@ -379,7 +380,7 @@ class MainWindow(QMainWindow):
                 f"{self._current_case.title}{modified} - Notepad + Copilot"
             )
             return
-        name = self._current_path.name if self._current_path else "未命名"
+        name = self._current_path.name if self._current_path else "Untitled"
         self.setWindowTitle(f"{name} - Notepad + Copilot")
 
     def _on_send(self, prompt: str):
@@ -402,10 +403,10 @@ class MainWindow(QMainWindow):
             return False
         QMessageBox.warning(
             self,
-            "无内容可归档",
-            "笔记区与对话区都是空的，归档将得到一份没有内容的"
-            "(N/A) 报告。\n\n请先在笔记区写点排查记录，或在右下方与 "
-            "Copilot 进行对话，再尝试归档。",
+            "Nothing to Archive",
+            "Notes and results are empty. Archiving would create an empty "
+            "(N/A) report.\n\nAdd troubleshooting notes or chat with "
+            "Copilot before archiving.",
         )
         return True
 
@@ -414,7 +415,7 @@ class MainWindow(QMainWindow):
         if self._archive_inputs_empty():
             return
         opts = ArchiveOptionsDialog(
-            self, title="本地归档选项", cloud_mode=False)
+            self, title="Local Archive Options", cloud_mode=False)
         if opts.exec() != QDialog.Accepted:
             return
         do_redact = opts.redact
@@ -428,9 +429,9 @@ class MainWindow(QMainWindow):
             default_dir = default_archive_dir()
         chosen, _ = QFileDialog.getSaveFileName(
             self,
-            "归档保存位置（选择目录名，archive.md / archive.html 会写在其中）",
+            "Archive Location (choose a folder name for archive.md and archive.html)",
             str(default_dir),
-            "归档目录 (*)",
+            "Archive Folder (*)",
         )
         if not chosen:
             return
@@ -443,7 +444,7 @@ class MainWindow(QMainWindow):
             note_md = self.editor.toPlainText()
         images = self.editor.collect_image_paths()
         qa_md = self.result.to_markdown()
-        title = target.name or "归档报告"
+        title = target.name or "Archive Report"
 
         kwargs = dict(
             target_dir=target,
@@ -458,7 +459,7 @@ class MainWindow(QMainWindow):
         # Run off the GUI thread (esp. when refine is on — it spawns copilot)
         progress = ArchiveProgressDialog(
             self,
-            message=("正在归档并精炼为 TSG…" if do_refine else "正在归档…"),
+            message=("Archiving and refining into a TSG…" if do_refine else "Archiving…"),
         )
         worker = ArchiveWorker(self, kwargs)
         worker_err: list[str] = []
@@ -472,18 +473,18 @@ class MainWindow(QMainWindow):
         worker.wait(2000)
 
         if worker_err:
-            QMessageBox.critical(self, "归档失败", worker_err[0])
+            QMessageBox.critical(self, "Archive Failed", worker_err[0])
             return
         if not worker_md:
-            QMessageBox.critical(self, "归档失败", "未返回归档路径")
+            QMessageBox.critical(self, "Archive Failed", "No archive path was returned.")
             return
         archive_md = worker_md[0]
         archive_html = archive_md.with_suffix(".html")
         if not archive_html.is_file():
             QMessageBox.critical(
                 self,
-                "归档失败",
-                f"Markdown 已生成，但 HTML 汇总文件缺失:\n{archive_html}",
+                "Archive Failed",
+                f"Markdown was generated, but the HTML report is missing:\n{archive_html}",
             )
             return
 
@@ -492,39 +493,39 @@ class MainWindow(QMainWindow):
             map_file = archive_md.parent / "redact_map.json"
             if map_file.is_file():
                 redact_note = (
-                    f"\n🔒 已脱敏，映射: {map_file.name}（保留本地，勿外发）"
+                    f"\n🔒 Redacted. Mapping: {map_file.name} (keep local; do not share)"
                 )
             else:
-                redact_note = "\n🔒 已应用脱敏（未发现敏感字段）"
+                redact_note = "\n🔒 Redaction applied (no sensitive fields found)"
         tsg_note = ""
         if do_refine:
             err_file = archive_md.parent / "archive.tsg.error.txt"
             raw_file = archive_md.parent / "archive.raw.md"
             if err_file.is_file():
                 tsg_note = (
-                    f"\n⚠ TSG 精炼失败，已回退为原始内容；详见 "
+                    f"\n⚠ TSG refinement failed; original content retained. See "
                     f"{err_file.name}"
                 )
             elif raw_file.is_file():
                 tsg_note = (
-                    "\n✨ 已精炼为 TSG；原始组合内容见 archive.raw.md"
+                    "\n✨ Refined into a TSG. Original content: archive.raw.md"
                 )
 
         html_url = QUrl.fromLocalFile(str(archive_html.resolve())).toString()
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Information)
-        msg_box.setWindowTitle("归档完成")
+        msg_box.setWindowTitle("Archive Complete")
         msg_box.setTextFormat(Qt.RichText)
         msg_box.setTextInteractionFlags(Qt.TextBrowserInteraction)
         msg_box.setText(
-            "HTML 汇总已生成：<br>"
+            "HTML report generated:<br>"
             f'<a href="{_html.escape(html_url, quote=True)}">'
             f"{_html.escape(str(archive_html))}</a><br><br>"
-            f"Markdown 副本：<br>{_html.escape(str(archive_md))}<br><br>"
-            f"图片数: {len([p for p in images if p.is_file()])}<br>"
-            f"对话条数: {len(self.result.qa_pairs())}"
+            f"Markdown copy:<br>{_html.escape(str(archive_md))}<br><br>"
+            f"Images: {len([p for p in images if p.is_file()])}<br>"
+            f"Conversation entries: {len(self.result.qa_pairs())}"
             f"{_html.escape(redact_note + tsg_note).replace(chr(10), '<br>')}"
-            "<br><br>是否打开所在目录？"
+            "<br><br>Open the containing folder?"
         )
         msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg_box.setDefaultButton(QMessageBox.Yes)
@@ -542,7 +543,7 @@ class MainWindow(QMainWindow):
                     subprocess.Popen(["xdg-open", str(archive_md.parent)])
             except Exception:  # noqa: BLE001
                 pass
-        msg = f"已归档 HTML: {archive_html}" + (" (已脱敏)" if do_redact else "")
+        msg = f"Archived HTML: {archive_html}" + (" (redacted)" if do_redact else "")
         self.statusBar().showMessage(msg, 8000)
 
     # --- cloud archive (Wiki upload) ---------------------------------
@@ -550,7 +551,7 @@ class MainWindow(QMainWindow):
     def _on_wiki_settings(self):
         dlg = WikiSettingsDialog(self)
         if dlg.exec() == QDialog.Accepted:
-            self.statusBar().showMessage("Wiki 配置已保存", 4000)
+            self.statusBar().showMessage("Wiki settings saved", 4000)
 
     def _on_cloud_archive(self):
         """URL-driven cloud archive: paste Wiki URL → pick path → upload."""
@@ -606,31 +607,31 @@ class MainWindow(QMainWindow):
                     get_access_token,
                     get_page_path_by_id,
                 )
-                self.statusBar().showMessage("☁ 正在解析父页面真实路径…")
+                self.statusBar().showMessage("☁ Resolving the parent page path…")
                 token = get_access_token()
                 real_parent = get_page_path_by_id(profile, token, page_id)
                 if real_parent:
                     page_path = real_parent.rstrip("/") + "/" + page_name
                 else:
                     QMessageBox.warning(
-                        self, "无法解析父页面",
-                        "未能通过 URL 中的页面 ID 找到对应的 Wiki 页面"
-                        f"（page id={page_id}）。\n\n"
-                        f"将使用根据 URL 推断的路径：\n{page_path}\n\n"
-                        "如结果不在期望的父页面下，请改用页面右上角"
-                        "「Copy page path」得到的链接，或在父路径中手动填写"
-                        "完整路径。",
+                        self, "Parent Page Not Found",
+                        "Could not find the Wiki page using the ID in the URL"
+                        f" (page ID={page_id}).\n\n"
+                        f"Using the path inferred from the URL:\n{page_path}\n\n"
+                        "If this is not the intended parent, use the page's "
+                        "Copy page path link or manually enter the "
+                        "full parent path.",
                     )
             except Exception as e:  # noqa: BLE001
                 QMessageBox.warning(
-                    self, "解析父页面失败",
-                    f"解析父页面真实路径时出错，将使用推断路径：\n{page_path}"
+                    self, "Parent Path Resolution Failed",
+                    f"Could not resolve the parent page. Using the inferred path:\n{page_path}"
                     f"\n\n{e}",
                 )
 
         # Archive options (TSG default ON for cloud, redact forced ON)
         opts = ArchiveOptionsDialog(
-            self, title="云端归档选项", cloud_mode=True,
+            self, title="Cloud Archive Options", cloud_mode=True,
             default_redact=True, default_refine=True,
         )
         if opts.exec() != QDialog.Accepted:
@@ -640,13 +641,13 @@ class MainWindow(QMainWindow):
         # Confirm
         confirm = QMessageBox.question(
             self,
-            "确认云端归档",
-            f"将上传脱敏{'+TSG 精炼' if do_refine else ''}后的归档到:\n\n"
+            "Confirm Cloud Archive",
+            f"Upload the redacted{' and TSG-refined' if do_refine else ''} archive to:\n\n"
             f"  Org: {profile.organization}\n"
             f"  Project: {profile.project}\n"
             f"  Wiki: {profile.wiki_identifier}\n"
-            f"  页面路径: {page_path}\n\n"
-            "（云端归档强制脱敏；继续？）",
+            f"  Page path: {page_path}\n\n"
+            "Cloud archives require redaction. Continue?",
         )
         if confirm != QMessageBox.Yes:
             return
@@ -666,8 +667,8 @@ class MainWindow(QMainWindow):
             note_md = self.editor.toPlainText()
         images = self.editor.collect_image_paths()
         qa_md = self.result.to_markdown()
-        title = (f"[{case_id}] 案例归档"
-                 if self._current_case else "归档报告")
+        title = (f"[{case_id}] Case Archive"
+                 if self._current_case else "Archive Report")
 
         kwargs = dict(
             target_dir=local_target,
@@ -680,8 +681,8 @@ class MainWindow(QMainWindow):
         )
         progress = ArchiveProgressDialog(
             self,
-            message=("正在脱敏并精炼为 TSG…"
-                     if do_refine else "正在脱敏归档…"),
+            message=("Redacting and refining into a TSG…"
+                     if do_refine else "Redacting and archiving…"),
         )
         worker = ArchiveWorker(self, kwargs)
         worker_err: list[str] = []
@@ -695,16 +696,16 @@ class MainWindow(QMainWindow):
         worker.wait(2000)
         if worker_err:
             QMessageBox.critical(
-                self, "云端归档失败（本地准备阶段）", worker_err[0])
+                self, "Cloud Archive Failed (Local Preparation)", worker_err[0])
             return
         if not worker_md:
             QMessageBox.critical(
-                self, "云端归档失败（本地准备阶段）", "未返回归档路径")
+                self, "Cloud Archive Failed (Local Preparation)", "No archive path was returned.")
             return
         archive_md = worker_md[0]
 
         # 2) Upload it
-        self.statusBar().showMessage("☁ 正在上传到 Wiki…")
+        self.statusBar().showMessage("☁ Uploading to Wiki…")
         attachment_prefix = f"{case_id}-{ts}"
         try:
             result = upload_archive(
@@ -715,20 +716,20 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(
-                self, "云端归档失败（上传阶段）",
-                f"本地副本已生成: {archive_md}\n\n上传失败:\n{e}"
+                self, "Cloud Archive Failed (Upload)",
+                f"Local copy saved: {archive_md}\n\nUpload failed:\n{e}"
             )
-            self.statusBar().showMessage("☁ 上传失败", 5000)
+            self.statusBar().showMessage("☁ Upload failed", 5000)
             return
 
-        action = "更新" if result.page_updated else "创建"
+        action = "updated" if result.page_updated else "created"
         ret = QMessageBox.information(
             self,
-            "云端归档完成",
-            f"✅ 已{action} Wiki 页面:\n  {result.page_path}\n\n"
-            f"上传附件数: {result.attachments_uploaded}\n"
-            f"本地副本: {archive_md}\n\n"
-            "在浏览器中打开 Wiki 页面？",
+            "Cloud Archive Complete",
+            f"✅ Wiki page {action}:\n  {result.page_path}\n\n"
+            f"Attachments uploaded: {result.attachments_uploaded}\n"
+            f"Local copy: {archive_md}\n\n"
+            "Open the Wiki page in your browser?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -741,7 +742,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self.statusBar().showMessage(
-            f"☁ Wiki {action}成功: {result.page_path}", 10000)
+            f"☁ Wiki page {action}: {result.page_path}", 10000)
 
     def closeEvent(self, event):  # noqa: N802
         if not self._confirm_discard():
@@ -763,7 +764,7 @@ class MainWindow(QMainWindow):
             self.result.load_qa_history(self._current_case.read_qa())
         except Exception as e:  # noqa: BLE001
             self.statusBar().showMessage(
-                f"案例日志写入失败: {e}", 5000)
+                f"Case history save failed: {e}", 5000)
 
     def _update_case_menu_state(self):
         has = self._current_case is not None
@@ -772,11 +773,11 @@ class MainWindow(QMainWindow):
 
     def _flash_case_status(self):
         if self._current_case is None:
-            self.statusBar().showMessage("已退出案例模式", 4000)
+            self.statusBar().showMessage("Case mode closed", 4000)
             return
         c = self._current_case
         self.statusBar().showMessage(
-            f"📁 案例: {c.case_id}  ({c.root})", 6000
+            f"📁 Case: {c.case_id}  ({c.root})", 6000
         )
 
     def _spawn_window_for_case(self, case: Case, fresh: bool) -> "MainWindow":
@@ -796,7 +797,7 @@ class MainWindow(QMainWindow):
         try:
             win._activate_case(case, fresh=fresh)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "新窗口激活案例失败", str(e))
+            QMessageBox.critical(self, "Could Not Activate Case in New Window", str(e))
         win.show()
         win.raise_()
         win.activateWindow()
@@ -818,13 +819,13 @@ class MainWindow(QMainWindow):
         if is_case_root_configured():
             return True
         QMessageBox.information(
-            self, "首次使用 — 选择案例根目录",
-            "尚未设置案例保存的根目录。\n\n"
-            "下面将弹出目录选择框。所有案例都会保存到所选目录下。\n\n"
-            f"如果直接取消，将使用默认目录:\n{get_case_root()}",
+            self, "First Use — Choose Case Root",
+            "No case root folder has been configured.\n\n"
+            "Choose a folder in the next dialog. All cases will be saved there.\n\n"
+            f"If you cancel, the default folder will be used:\n{get_case_root()}",
         )
         chosen = QFileDialog.getExistingDirectory(
-            self, "选择案例根目录",
+            self, "Choose Case Root",
             str(get_case_root()),
         )
         if not chosen:
@@ -832,22 +833,22 @@ class MainWindow(QMainWindow):
             try:
                 set_case_root(get_case_root())
             except Exception as e:  # noqa: BLE001
-                QMessageBox.critical(self, "设置失败", str(e))
+                QMessageBox.critical(self, "Setup Failed", str(e))
                 return False
             return True
         try:
             new_root = set_case_root(chosen)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "设置失败", str(e))
+            QMessageBox.critical(self, "Setup Failed", str(e))
             return False
         self.statusBar().showMessage(
-            f"📁 案例根目录已设置: {new_root}", 6000)
+            f"📁 Case root set: {new_root}", 6000)
         return True
 
     def _on_change_case_root(self):
         """Let the user pick a new case root anytime."""
         chosen = QFileDialog.getExistingDirectory(
-            self, "切换案例根目录",
+            self, "Change Case Root",
             str(get_case_root()),
         )
         if not chosen:
@@ -855,29 +856,29 @@ class MainWindow(QMainWindow):
         try:
             new_root = set_case_root(chosen)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "切换失败", str(e))
+            QMessageBox.critical(self, "Change Failed", str(e))
             return None
         self.statusBar().showMessage(
-            f"📁 案例根目录已切换: {new_root}", 6000)
+            f"📁 Case root changed: {new_root}", 6000)
         return new_root
 
     def _on_new_case(self):
         if not self._ensure_case_root_configured():
             return
         case_id, ok = QInputDialog_get_text(
-            self, "新建案例",
-            f"案例根目录: {get_case_root()}\n\n"
-            "案例号（如: TrackingID-12345）：",
+            self, "New Case",
+            f"Case root: {get_case_root()}\n\n"
+            "Case ID (e.g. TrackingID-12345):",
         )
         if not ok or not case_id.strip():
             return
         title, _ok2 = QInputDialog_get_text(
-            self, "新建案例", "案例标题（可留空）：", default=case_id.strip(),
+            self, "New Case", "Case title (optional):", default=case_id.strip(),
         )
         try:
             case = create_case(case_id.strip(), title=title.strip())
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "创建失败", str(e))
+            QMessageBox.critical(self, "Create Failed", str(e))
             return
         self._open_case_in_appropriate_window(case, fresh=True)
 
@@ -887,10 +888,9 @@ class MainWindow(QMainWindow):
         cases = list_cases()
         if not cases:
             ret = QMessageBox.question(
-                self, "无案例",
-                f"尚未创建任何案例。\n目录: {get_case_root()}\n\n"
-                "现在创建一个？\n（如需更换根目录，请点击「No」后再次「打开案例」"
-                "在弹出对话框里点「切换根目录…」。）",
+                self, "No Cases",
+                f"No cases have been created.\nFolder: {get_case_root()}\n\n"
+                "Create a case now?",
             )
             if ret == QMessageBox.Yes:
                 self._on_new_case()
@@ -906,9 +906,9 @@ class MainWindow(QMainWindow):
                 cases = list_cases()
                 if not cases:
                     QMessageBox.information(
-                        self, "新根目录暂无案例",
-                        f"目录: {get_case_root()}\n\n"
-                        "可点击「📂 新建案例」创建第一个。",
+                        self, "No Cases in New Root",
+                        f"Folder: {get_case_root()}\n\n"
+                        "Click New Case to create your first case.",
                     )
                     return
                 continue
@@ -920,22 +920,22 @@ class MainWindow(QMainWindow):
             try:
                 case = open_case(case.root)
             except Exception as e:  # noqa: BLE001
-                QMessageBox.critical(self, "打开失败", str(e))
+                QMessageBox.critical(self, "Open Failed", str(e))
                 return
             self._open_case_in_appropriate_window(case, fresh=False)
             return
 
     def _on_close_case(self):
         if self._current_case is None:
-            QMessageBox.information(self, "关闭案例", "当前没有打开的案例。")
+            QMessageBox.information(self, "Close Case", "No case is open.")
             return
         case = self._current_case
         # Persist note before closing the window.
         if not self._save_case_note(silent=True):
-            msg = self._last_case_save_error or "未知错误"
+            msg = self._last_case_save_error or "Unknown error"
             ret = QMessageBox.question(
-                self, "保存案例笔记失败",
-                f"保存笔记时出错：\n{msg}\n\n仍要关闭窗口吗？",
+                self, "Case Note Save Failed",
+                f"Could not save your notes:\n{msg}\n\nClose the window anyway?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -952,14 +952,14 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self.statusBar().showMessage(
-            f"已保存并关闭案例 [{case.case_id}]", 3000)
+            f"Case [{case.case_id}] saved and closed", 3000)
         # Close the window itself.
         self.close()
 
     def _on_reveal_case(self):
         if self._current_case is None:
             QMessageBox.information(
-                self, "打开案例目录", "当前没有打开的案例。")
+                self, "Open Case Folder", "No case is open.")
             return
         # Resolve OneDrive / symlink quirks → real filesystem path.
         try:
@@ -969,8 +969,8 @@ class MainWindow(QMainWindow):
         path = str(raw)
         if not raw.is_dir():
             QMessageBox.critical(
-                self, "打开目录失败",
-                f"案例目录不存在或无法访问:\n{path}",
+                self, "Open Folder Failed",
+                f"The case folder does not exist or is inaccessible:\n{path}",
             )
             return
         # Try Qt's shell handler first (most reliable across OneDrive/UNC).
@@ -994,21 +994,21 @@ class MainWindow(QMainWindow):
                     opened = True
             except Exception as e:  # noqa: BLE001
                 QMessageBox.critical(
-                    self, "打开目录失败", f"{path}\n\n{e}")
+                    self, "Open Folder Failed", f"{path}\n\n{e}")
                 return
         # Visible feedback so user knows the action fired.
         self.statusBar().showMessage(
-            f"📂 已在文件管理器中打开: {path}", 4000)
+            f"📂 Opened in file manager: {path}", 4000)
 
     def _on_upload_files(self):
         """Pick one or more files (multi-select)."""
         paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "选择要上传的文件 (可多选)",
+            "Select Files to Upload (multiple)",
             "",
-            "所有支持类型 (*.log *.txt *.json *.csv *.tsv *.xml *.yaml "
+            "All Supported Types (*.log *.txt *.json *.csv *.tsv *.xml *.yaml "
             "*.yml *.out *.err *.tar *.gz *.zip *.7z *.png *.jpg *.jpeg "
-            "*.bmp *.gif *.webp);;所有文件 (*)",
+            "*.bmp *.gif *.webp);;All Files (*)",
         )
         if not paths:
             return
@@ -1017,7 +1017,7 @@ class MainWindow(QMainWindow):
     def _on_upload_folder(self):
         """Pick a folder; everything under it is uploaded recursively."""
         folder = QFileDialog.getExistingDirectory(
-            self, "选择要上传的文件夹 (递归)", "",
+            self, "Select Folder to Upload (recursive)", "",
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
         if not folder:
@@ -1039,23 +1039,23 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QInputDialog
         while True:
             choice, ok = QInputDialog.getItem(
-                self, "上传文件/文件夹",
-                f"已选 {len(targets)} 项。继续添加，或选择「完成上传」。",
-                ["➕ 添加文件 (可多选)",
-                 "➕ 添加文件夹 (递归)",
-                 "✅ 完成上传",
-                 "❌ 取消"],
+                self, "Upload Files and Folders",
+                f"{len(targets)} items selected. Add more, or choose Finish Upload.",
+                ["➕ Add Files (multiple)",
+                 "➕ Add Folder (recursive)",
+                 "✅ Finish Upload",
+                 "❌ Cancel"],
                 0, False,
             )
             if not ok:
                 return
-            if choice.startswith("➕ 添加文件"):
+            if choice.startswith("➕ Add Files"):
                 paths, _ = QFileDialog.getOpenFileNames(
-                    self, "选择文件 (可多选)", "", "所有文件 (*)")
+                    self, "Select Files (multiple)", "", "All Files (*)")
                 targets.extend(Path(p) for p in paths)
-            elif choice.startswith("➕ 添加文件夹"):
+            elif choice.startswith("➕ Add Folder"):
                 folder = QFileDialog.getExistingDirectory(
-                    self, "选择文件夹", "",
+                    self, "Select Folder", "",
                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
                 )
                 if folder:
@@ -1087,19 +1087,19 @@ class MainWindow(QMainWindow):
             where = (
                 str(self._current_case.attachments_dir)
                 if self._current_case is not None
-                else f"(暂存) {self.editor.pending_dir()}"
+                else f"(staged) {self.editor.pending_dir()}"
             )
             kb = max(1, n_bytes // 1024)
             size_str = (f"{kb} KB" if kb < 1024
                         else f"{kb / 1024:.1f} MB")
             self.statusBar().showMessage(
-                f"📎 已上传 {n_files} 个文件 ({size_str}) 到 {where}",
+                f"📎 Uploaded {n_files} files ({size_str}) to {where}",
                 6000,
             )
         if errors:
             QMessageBox.warning(
-                self, "部分内容上传失败",
-                "以下项目未能上传：\n\n" + "\n\n".join(errors),
+                self, "Some Uploads Failed",
+                "Could not upload these items:\n\n" + "\n\n".join(errors),
             )
 
     def _activate_case(self, case: Case, fresh: bool):
@@ -1121,7 +1121,7 @@ class MainWindow(QMainWindow):
         try:
             self.chat.reset_session()
         except Exception as e:  # noqa: BLE001
-            errors.append(f"重置会话: {e}")
+            errors.append(f"Reset session: {e}")
 
         # 2. Load note.md into editor (or start blank with template)
         try:
@@ -1131,45 +1131,45 @@ class MainWindow(QMainWindow):
             self.editor.set_attachments_dir(case.attachments_dir)
             self.editor.document().setModified(False)
         except Exception as e:  # noqa: BLE001
-            errors.append(f"载入笔记: {e}")
+            errors.append(f"Load notes: {e}")
 
         # 3. Load chat history into result pane
         try:
             history = case.read_qa()
             if history:
                 banner = (
-                    f"# 📁 案例 [{case.case_id}] {case.title}\n\n"
-                    f"_已载入 {len(history)} 条历史对话_\n"
-                    f"_案例目录: `{case.root}`_"
+                    f"# 📁 Case [{case.case_id}] {case.title}\n\n"
+                    f"_Loaded {len(history)} conversation entries_\n"
+                    f"_Case folder: `{case.root}`_"
                 )
                 self.result.load_qa_history(history, banner=banner)
                 self.chat.output.appendPlainText(
-                    f"--- 已载入案例 [{case.case_id}] 的 "
-                    f"{len(history)} 条历史对话（仅展示，"
-                    "Copilot 上下文已重置）---"
+                    f"--- Loaded {len(history)} conversation entries "
+                    f"for case [{case.case_id}] (display only; "
+                    "Copilot context has been reset) ---"
                 )
             else:
                 self.result.clear()
                 if not fresh:
                     self.chat.output.appendPlainText(
-                        f"--- 已打开案例 [{case.case_id}]，"
-                        "暂无历史对话 ---"
+                        f"--- Opened case [{case.case_id}]; "
+                        "no conversation history yet ---"
                     )
         except Exception as e:  # noqa: BLE001
-            errors.append(f"载入历史对话: {e}")
+            errors.append(f"Load conversation history: {e}")
 
         # 4. Surface any partial-failure info
         if errors:
             QMessageBox.warning(
-                self, "案例已打开（部分步骤失败）",
-                f"案例 [{case.case_id}] 已激活，但以下步骤出错：\n\n"
+                self, "Case Opened (Some Steps Failed)",
+                f"Case [{case.case_id}] is active, but these steps failed:\n\n"
                 + "\n".join(f"• {m}" for m in errors),
             )
             self.statusBar().showMessage(
-                f"⚠ 案例 {case.case_id} 部分步骤失败", 8000)
+                f"⚠ Some steps failed for case {case.case_id}", 8000)
         else:
             self.statusBar().showMessage(
-                f"📁 案例已激活: {case.case_id}（{case.root}）", 8000)
+                f"📁 Case active: {case.case_id} ({case.root})", 8000)
 
     def _on_autosave_tick(self):
         """Periodic autosave (every 5s). Only active when a case is open."""
@@ -1185,7 +1185,7 @@ class MainWindow(QMainWindow):
         if note_hash != self._autosave_last_note_hash:
             if not self._save_case_note(silent=True):
                 self.statusBar().showMessage(
-                    f"自动保存案例笔记失败: {self._last_case_save_error}",
+                    f"Case note autosave failed: {self._last_case_save_error}",
                     8000,
                 )
 
@@ -1197,10 +1197,10 @@ class MainWindow(QMainWindow):
         if qa_count != self._autosave_last_qa_count:
             try:
                 snap = self._current_case.root / "result-snapshot.md"
-                qa_md = self.result.to_markdown() or "(空)"
+                qa_md = self.result.to_markdown() or "(Empty)"
                 ts = _datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 snap.write_text(
-                    f"# 结果快照\n\n_最后更新: {ts}_\n\n{qa_md}\n",
+                    f"# Results Snapshot\n\n_Last updated: {ts}_\n\n{qa_md}\n",
                     encoding="utf-8",
                 )
                 self._autosave_last_qa_count = qa_count
@@ -1237,12 +1237,12 @@ class MainWindow(QMainWindow):
             self._last_case_save_error = ""
             if not silent:
                 self.statusBar().showMessage(
-                    f"已保存案例笔记: {self._current_case.note_path}", 4000)
+                    f"Case notes saved: {self._current_case.note_path}", 4000)
             return True
         except Exception as e:  # noqa: BLE001
             self._last_case_save_error = str(e)
             if not silent:
-                QMessageBox.critical(self, "保存案例笔记失败", str(e))
+                QMessageBox.critical(self, "Case Note Save Failed", str(e))
             return False
 
 
@@ -1268,32 +1268,32 @@ class _CasePickerDialog(QDialog):
 
     def __init__(self, cases: list[Case], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("打开案例")
+        self.setWindowTitle("Open Case")
         self.resize(640, 460)
         v = QVBoxLayout(self)
 
         # Header row: current root + "switch root" button
         head = QHBoxLayout()
         self._root_label = QLabel(
-            f"案例根目录: {get_case_root()}"
+            f"Case root: {get_case_root()}"
         )
         self._root_label.setWordWrap(True)
         head.addWidget(self._root_label, 1)
         btn_change = QToolButton()
-        btn_change.setText("📂 切换根目录…")
-        btn_change.setToolTip("修改案例的保存根目录（设置会持久化）")
+        btn_change.setText("📂 Change Root…")
+        btn_change.setToolTip("Change the case root folder (this setting is saved)")
         btn_change.clicked.connect(self._emit_change_root)
         head.addWidget(btn_change, 0)
         v.addLayout(head)
 
         v.addWidget(QLabel(
-            "（按最后修改/保存时间倒序排列；最近使用的在最上方）"
+            "Sorted by last edit or save, most recent first"
         ))
 
         row = QHBoxLayout()
-        row.addWidget(QLabel("过滤:"))
+        row.addWidget(QLabel("Filter:"))
         self._filter = QLineEdit()
-        self._filter.setPlaceholderText("输入案例号或标题片段…")
+        self._filter.setPlaceholderText("Filter by case ID or title…")
         self._filter.textChanged.connect(self._apply_filter)
         row.addWidget(self._filter, 1)
         v.addLayout(row)
@@ -1308,8 +1308,8 @@ class _CasePickerDialog(QDialog):
         btns = QDialogButtonBox(
             QDialogButtonBox.Open | QDialogButtonBox.Cancel
         )
-        btns.button(QDialogButtonBox.Open).setText("打开")
-        btns.button(QDialogButtonBox.Cancel).setText("取消")
+        btns.button(QDialogButtonBox.Open).setText("Open")
+        btns.button(QDialogButtonBox.Cancel).setText("Cancel")
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         v.addWidget(btns)
@@ -1333,7 +1333,7 @@ class _CasePickerDialog(QDialog):
             updated = c.updated.replace("T", " ") if c.updated else "?"
             label = (
                 f"[{c.case_id}]  {c.title or ''}\n"
-                f"   更新: {updated}   ·   对话: {n_qa} 条"
+                f"   Updated: {updated}   ·   Conversation entries: {n_qa}"
             )
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, c)

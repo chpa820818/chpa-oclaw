@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -81,15 +82,20 @@ class AzAccountBar(QWidget):
 
     def _build_ui(self):
         self.setObjectName("AzBar")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 6, 12, 6)
+        rows = QVBoxLayout(self)
+        rows.setContentsMargins(12, 6, 12, 6)
+        rows.setSpacing(6)
+        layout = QHBoxLayout()
         layout.setSpacing(6)
+        rows.addLayout(layout)
 
-        lbl_user = QLabel("👤  账户")
+        lbl_user = QLabel("👤  Account")
         lbl_user.setObjectName("FieldLabel")
         layout.addWidget(lbl_user)
         self.user_box = QComboBox()
         self.user_box.setMinimumWidth(220)
+        self.user_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.user_box.setMinimumContentsLength(18)
         self.user_box.currentIndexChanged.connect(self._on_user_changed)
         layout.addWidget(self.user_box)
 
@@ -98,52 +104,61 @@ class AzAccountBar(QWidget):
         layout.addWidget(lbl_cloud)
         self.cloud_box = QComboBox()
         self.cloud_box.setMinimumWidth(140)
+        self.cloud_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.cloud_box.setMinimumContentsLength(14)
         self.cloud_box.currentTextChanged.connect(self._on_cloud_changed)
         layout.addWidget(self.cloud_box)
 
-        lbl_sub = QLabel("🗂  订阅")
+        lbl_sub = QLabel("🗂  Subscription")
         lbl_sub.setObjectName("FieldLabel")
         layout.addWidget(lbl_sub)
         self.sub_box = QComboBox()
         self.sub_box.setMinimumWidth(280)
+        self.sub_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.sub_box.setMinimumContentsLength(22)
         self.sub_box.currentIndexChanged.connect(self._on_sub_changed)
         layout.addWidget(self.sub_box, 1)
 
+        actions = QHBoxLayout()
+        actions.setSpacing(6)
+        rows.addLayout(actions)
         # Inline busy indicator (hidden when idle).
         self.busy_label = QLabel("")
+        self.busy_label.setWordWrap(True)
         self.busy_label.setObjectName("BusyLabel")
         self.busy_label.setVisible(False)
-        layout.addWidget(self.busy_label)
+        actions.addWidget(self.busy_label)
         self.busy_bar = QProgressBar()
         self.busy_bar.setRange(0, 0)         # indeterminate
         self.busy_bar.setMaximumWidth(80)
         self.busy_bar.setMaximumHeight(6)
         self.busy_bar.setTextVisible(False)
         self.busy_bar.setVisible(False)
-        layout.addWidget(self.busy_bar)
+        actions.addWidget(self.busy_bar)
+        actions.addStretch(1)
 
-        self.add_btn = QPushButton("＋  添加账户")
+        self.add_btn = QPushButton("＋  Add Account")
         self.add_btn.setProperty("accent", True)
-        self.add_btn.setToolTip("追加登录另一个账户（不会登出现有账户）")
+        self.add_btn.setToolTip("Sign in to another account without signing out existing accounts")
         self.add_btn.clicked.connect(self._on_add_account)
-        layout.addWidget(self.add_btn)
+        actions.addWidget(self.add_btn)
 
-        self.logout_btn = QPushButton("登出")
+        self.logout_btn = QPushButton("Sign Out")
         self.logout_btn.setProperty("danger", True)
-        self.logout_btn.setToolTip("仅登出当前选中的账户")
+        self.logout_btn.setToolTip("Sign out only the selected account")
         self.logout_btn.clicked.connect(self._on_logout_current)
-        layout.addWidget(self.logout_btn)
+        actions.addWidget(self.logout_btn)
 
-        self.refresh_btn = QPushButton("⟳  刷新")
+        self.refresh_btn = QPushButton("⟳  Refresh")
         self.refresh_btn.clicked.connect(self.refresh)
-        layout.addWidget(self.refresh_btn)
+        actions.addWidget(self.refresh_btn)
 
     # --- public --------------------------------------------------------
 
     def refresh(self):
         if not self.az.available:
             self.user_box.clear()
-            self.user_box.addItem("(az CLI 未安装)")
+            self.user_box.addItem("(Azure CLI not installed)")
             for w in (self.cloud_box, self.sub_box, self.add_btn,
                       self.logout_btn, self.user_box):
                 w.setEnabled(False)
@@ -151,7 +166,7 @@ class AzAccountBar(QWidget):
         if self._refresh_in_progress:
             return
         self._refresh_in_progress = True
-        self._begin_busy("正在读取 Azure 账户和订阅…")
+        self._begin_busy("Loading Azure accounts and subscriptions…")
 
         def work():
             return {
@@ -165,7 +180,7 @@ class AzAccountBar(QWidget):
             self._refresh_in_progress = False
             self._end_busy()
             if err is not None:
-                QMessageBox.warning(self, "刷新失败", str(err))
+                QMessageBox.warning(self, "Refresh Failed", str(err))
                 return
             self._apply_refresh_data(data)
 
@@ -188,7 +203,7 @@ class AzAccountBar(QWidget):
                             if s.get("user")})
             self.user_box.clear()
             if not users:
-                self.user_box.addItem("(未登录)")
+                self.user_box.addItem("(not signed in)")
                 self.user_box.setEnabled(False)
                 self.sub_box.clear()
                 self.sub_box.setEnabled(False)
@@ -197,7 +212,7 @@ class AzAccountBar(QWidget):
             self.user_box.setEnabled(True)
             for u in users:
                 count = sum(1 for s in self._all_subs if s.get("user") == u)
-                self.user_box.addItem(f"{u}  ({count} 订阅)", u)
+                self.user_box.addItem(f"{u}  ({count} subscriptions)", u)
 
             cur_user = account.user if account else users[0]
             idx = next(
@@ -307,12 +322,12 @@ class AzAccountBar(QWidget):
         self._async_set_subscription(sub_id, expected_user=user)
 
     def _async_set_subscription(self, sub_id: str, expected_user: str | None):
-        self._begin_busy(f"切换订阅 → {sub_id[:8]}…")
+        self._begin_busy(f"Switching subscription → {sub_id[:8]}…")
 
         def on_done(_res, err):
             self._end_busy()
             if err is not None:
-                QMessageBox.critical(self, "切换订阅失败", str(err))
+                QMessageBox.critical(self, "Subscription Switch Failed", str(err))
                 self.refresh()
                 return
             self.refresh()
@@ -332,23 +347,23 @@ class AzAccountBar(QWidget):
         self.az.set_subscription(sub_id)
         actual = self.az.current_account()
         if actual is None:
-            raise RuntimeError("切换后无法读取当前 Azure CLI 上下文。")
+            raise RuntimeError("Could not read the Azure CLI context after switching.")
         if actual.subscription_id.lower() != sub_id.lower():
             raise RuntimeError(
-                "Azure CLI 切换后返回的订阅与目标不一致。\n\n"
-                f"目标订阅: {sub_id}\n"
-                f"实际订阅: {actual.subscription_id}\n"
-                f"实际账户: {actual.user}"
+                "The Azure CLI subscription does not match the requested subscription.\n\n"
+                f"Requested subscription: {sub_id}\n"
+                f"Actual subscription: {actual.subscription_id}\n"
+                f"Actual account: {actual.user}"
             )
         if expected_user and actual.user.lower() != expected_user.lower():
             raise RuntimeError(
-                "Azure CLI 切换后返回的账户与目标不一致。\n\n"
-                f"目标账户: {expected_user}\n"
-                f"实际账户: {actual.user}\n"
-                f"订阅: {actual.subscription_name} ({actual.subscription_id})\n\n"
-                "这通常表示多个账户都能访问同一个订阅，Azure CLI "
-                "按订阅 ID 切换时选中了另一组凭据。请先在顶部账户栏"
-                "点击“添加账户”重新登录目标账户，或登出不需要的账户后重试。"
+                "The Azure CLI account does not match the requested account.\n\n"
+                f"Requested account: {expected_user}\n"
+                f"Actual account: {actual.user}\n"
+                f"Subscription: {actual.subscription_name} ({actual.subscription_id})\n\n"
+                "Multiple accounts may have access to this subscription, and Azure CLI "
+                "selected different credentials. Use Add Account to sign in to the "
+                "intended account, or sign out unused accounts and try again."
             )
         return actual
 
@@ -360,8 +375,8 @@ class AzAccountBar(QWidget):
             return
         confirm = QMessageBox.question(
             self,
-            "切换 Cloud",
-            f"切换到 {name} 后通常需要重新登录。继续？",
+            "Switch Cloud",
+            f"Switching to {name} usually requires signing in again. Continue?",
         )
         if confirm != QMessageBox.Yes:
             self._suspend_signals = True
@@ -371,12 +386,12 @@ class AzAccountBar(QWidget):
                 self._suspend_signals = False
             return
 
-        self._begin_busy(f"切换 Cloud → {name}…")
+        self._begin_busy(f"Switching cloud → {name}…")
 
         def on_done(_res, err):
             self._end_busy()
             if err is not None:
-                QMessageBox.critical(self, "切换 Cloud 失败", str(err))
+                QMessageBox.critical(self, "Cloud Switch Failed", str(err))
                 return
             self._spawn_login_and_refresh(tenant=None)
 
@@ -386,10 +401,10 @@ class AzAccountBar(QWidget):
         _log("_on_add_account: clicked")
         text, ok = QInputDialog.getText(
             self,
-            "添加账户登录",
-            "输入用户名（user@domain，留空走默认登录）：\n"
-            "例如：chpa@microsoft.com 或 chpa@mcpod.partner.onmschina.cn\n"
-            "提示：会自动从 @ 后提取 tenant 域名传给 az login。",
+            "Add Account",
+            "Enter a username (user@domain), or leave blank for default sign-in:\n"
+            "Example: chpa@microsoft.com or chpa@mcpod.partner.onmschina.cn\n"
+            "The domain after @ is passed to az login as the tenant.",
         )
         _log(f"_on_add_account: dialog ok={ok} text='{text}'")
         if not ok:
@@ -401,7 +416,7 @@ class AzAccountBar(QWidget):
                 tenant = text.split("@", 1)[1].strip().lower()
                 if not tenant:
                     QMessageBox.warning(
-                        self, "格式错误", f"无法从 '{text}' 提取域名。",
+                        self, "Invalid Format", f"Could not extract a domain from '{text}'.",
                     )
                     return
             else:
@@ -420,24 +435,24 @@ class AzAccountBar(QWidget):
             user = cur.user if cur else None
         if not user:
             QMessageBox.information(
-                self, "登出",
-                "当前账户列表为空，无法登出。请先点击‘刷新’或‘添加账户’。",
+                self, "Sign Out",
+                "No account is available to sign out. Click Refresh or Add Account first.",
             )
             return
         confirm = QMessageBox.question(
             self,
-            "登出账户",
-            f"确认登出 {user}？\n（其他已登录账户不受影响）",
+            "Sign Out",
+            f"Sign out {user}?\nOther signed-in accounts will not be affected.",
         )
         if confirm != QMessageBox.Yes:
             return
 
-        self._begin_busy(f"登出 {user}…")
+        self._begin_busy(f"Signing out {user}…")
 
         def on_done(_res, err):
             self._end_busy()
             if err is not None:
-                QMessageBox.critical(self, "登出失败", str(err))
+                QMessageBox.critical(self, "Sign-Out Failed", str(err))
                 return
             self.account_changed.emit()
             self.refresh()
@@ -454,10 +469,10 @@ class AzAccountBar(QWidget):
             _log(f"  spawn_login returned popen pid={popen.pid}")
         except Exception as e:
             _log(f"  spawn_login EXCEPTION: {e}\n{_tb.format_exc()}")
-            QMessageBox.critical(self, "登录失败", str(e))
+            QMessageBox.critical(self, "Sign-In Failed", str(e))
             return
-        msg = (f"登录中… (tenant={tenant})" if tenant
-               else "登录中… 请在弹出的浏览器/终端完成")
+        msg = (f"Signing in… (tenant={tenant})" if tenant
+               else "Signing in… Complete sign-in in the browser or terminal")
         self._begin_busy(msg)
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(1000)
@@ -478,4 +493,3 @@ class AzAccountBar(QWidget):
 
         self._poll_timer.timeout.connect(_check)
         self._poll_timer.start()
-

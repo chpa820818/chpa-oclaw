@@ -32,7 +32,7 @@ class WikiSettingsDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Wiki 配置（云端归档目标）")
+        self.setWindowTitle("Wiki Settings (Cloud Archive Target)")
         self.resize(720, 460)
 
         self.cfg: WikiConfig = load_config()
@@ -42,43 +42,43 @@ class WikiSettingsDialog(QDialog):
 
         # Left: list + default picker + add/remove
         left = QVBoxLayout()
-        left.addWidget(QLabel("Profile 列表"))
+        left.addWidget(QLabel("Profiles"))
         self.list = QListWidget()
         self.list.currentRowChanged.connect(self._on_select)
         left.addWidget(self.list, 1)
 
         btn_row = QHBoxLayout()
-        self.add_btn = QPushButton("＋ 新增")
+        self.add_btn = QPushButton("＋ Add")
         self.add_btn.clicked.connect(self._on_add)
         btn_row.addWidget(self.add_btn)
-        self.del_btn = QPushButton("－ 删除")
+        self.del_btn = QPushButton("－ Delete")
         self.del_btn.setProperty("danger", True)
         self.del_btn.clicked.connect(self._on_delete)
         btn_row.addWidget(self.del_btn)
         left.addLayout(btn_row)
 
-        left.addWidget(QLabel("默认 profile（云端归档使用）"))
+        left.addWidget(QLabel("Default cloud archive profile"))
         self.default_box = QComboBox()
         self.default_box.currentTextChanged.connect(self._on_default_changed)
         left.addWidget(self.default_box)
 
         left_w = QWidget()
         left_w.setLayout(left)
-        left_w.setMaximumWidth(260)
+        left_w.setMinimumWidth(240)
         root.addWidget(left_w)
 
         # Right: edit form
         right = QVBoxLayout()
-        right.addWidget(QLabel("编辑选中 profile"))
+        right.addWidget(QLabel("Edit selected profile"))
 
         form = QFormLayout()
         self.name_edit = QLineEdit()
         self.name_edit.editingFinished.connect(self._on_field_changed)
-        form.addRow("名称:", self.name_edit)
+        form.addRow("Name:", self.name_edit)
 
         self.org_edit = QLineEdit()
         self.org_edit.setPlaceholderText(
-            "粘贴 Wiki 完整 URL 自动解析；或填 https://dev.azure.com/myorg"
+            "Paste a Wiki URL, or enter https://dev.azure.com/myorg"
         )
         self.org_edit.editingFinished.connect(self._on_field_changed)
         self.org_edit.textChanged.connect(self._on_org_text_changed)
@@ -89,27 +89,27 @@ class WikiSettingsDialog(QDialog):
         form.addRow("Project:", self.project_edit)
 
         self.wiki_edit = QLineEdit()
-        self.wiki_edit.setPlaceholderText("Wiki 名称或 ID（如 MyProject.wiki）")
+        self.wiki_edit.setPlaceholderText("Wiki name or ID (e.g. MyProject.wiki)")
         self.wiki_edit.editingFinished.connect(self._on_field_changed)
         form.addRow("Wiki Identifier:", self.wiki_edit)
 
         self.parent_edit = QLineEdit()
         self.parent_edit.setPlaceholderText("/Cases")
         self.parent_edit.editingFinished.connect(self._on_field_changed)
-        form.addRow("默认父路径:", self.parent_edit)
+        form.addRow("Default parent path:", self.parent_edit)
 
         self.api_edit = QLineEdit()
         self.api_edit.setPlaceholderText("7.0")
         self.api_edit.editingFinished.connect(self._on_field_changed)
-        form.addRow("API 版本:", self.api_edit)
+        form.addRow("API version:", self.api_edit)
 
         right.addLayout(form)
 
         # Hint
         hint = QLabel(
-            "💡 鉴权：使用当前 az 登录账户的 Token，"
-            "请确认登录账户对该 Wiki 有写权限。\n"
-            "💡 上传时页面路径 = 父路径 + /<案例号>/<时间戳>-archive。"
+            "💡 Uses the current Azure CLI account. "
+            "Wiki write permission is required.\n"
+            "💡 Review the parent path and page name in the upload dialog."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #656d76; padding: 8px 0;")
@@ -120,8 +120,8 @@ class WikiSettingsDialog(QDialog):
         btns = QDialogButtonBox(
             QDialogButtonBox.Save | QDialogButtonBox.Cancel
         )
-        btns.button(QDialogButtonBox.Save).setText("保存")
-        btns.button(QDialogButtonBox.Cancel).setText("取消")
+        btns.button(QDialogButtonBox.Save).setText("Save")
+        btns.button(QDialogButtonBox.Cancel).setText("Cancel")
         btns.accepted.connect(self._on_save)
         btns.rejected.connect(self.reject)
         right.addWidget(btns)
@@ -138,7 +138,7 @@ class WikiSettingsDialog(QDialog):
         self.list.blockSignals(True)
         self.list.clear()
         for p in self.cfg.profiles:
-            item = QListWidgetItem(p.name or "(未命名)")
+            item = QListWidgetItem(p.name or "(unnamed)")
             self.list.addItem(item)
         self.list.blockSignals(False)
 
@@ -200,7 +200,7 @@ class WikiSettingsDialog(QDialog):
         # Reflect rename in list + default combo
         item = self.list.item(self._current_index)
         if item is not None:
-            item.setText(p.name or "(未命名)")
+            item.setText(p.name or "(unnamed)")
         if self.cfg.default == old_name:
             self.cfg.default = p.name
         self.default_box.blockSignals(True)
@@ -251,8 +251,8 @@ class WikiSettingsDialog(QDialog):
             return
         p = self.cfg.profiles[self._current_index]
         ret = QMessageBox.question(
-            self, "删除 profile",
-            f"确认删除 '{p.name}'？",
+            self, "Delete Profile",
+            f"Delete '{p.name}'?",
         )
         if ret != QMessageBox.Yes:
             return
@@ -271,14 +271,14 @@ class WikiSettingsDialog(QDialog):
             miss = p.missing_fields()
             if miss:
                 QMessageBox.warning(
-                    self, "保存失败",
-                    f"profile '{p.name or '(未命名)'}' 缺少必填字段：\n"
-                    + "、".join(miss)
+                    self, "Save Failed",
+                    f"Profile '{p.name or '(unnamed)'}' is missing required fields:\n"
+                    + ", ".join(miss)
                 )
                 return
         try:
             save_config(self.cfg)
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "保存失败", str(e))
+            QMessageBox.critical(self, "Save Failed", str(e))
             return
         self.accept()

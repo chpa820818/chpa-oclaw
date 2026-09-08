@@ -98,7 +98,7 @@ def _ensure_tsg_structure(text: str, title: str) -> str:
                 body = "\n".join(lines[1:]).strip()
                 text = (
                     f"{h1}\n\n"
-                    "## 1. 现象 (Symptom)\n\n"
+                    "## 1. Symptom\n\n"
                     f"{body}\n\n"
                     f"{after}"
                 )
@@ -180,19 +180,19 @@ _TSG_PROMPT_TEMPLATE = """\
 ```
 # {title}
 
-> _自动生成的排查总结。原始记录与脱敏映射保留在同目录。_
+> _Automatically generated troubleshooting summary. Original records and redaction mappings are retained in the same folder._
 
-## 1. 现象 (Symptom)
-## 2. 影响范围 (Scope / Impact)
-## 3. 排查步骤 (Investigation Steps)
-## 4. 根因 (Root Cause)
-## 5. 缓解 / 解决方案 (Mitigation / Resolution)
-## 6. 验证 (Verification)
-## 7. 参考 / 附录 (References / Appendix)
+## 1. Symptom
+## 2. Scope / Impact
+## 3. Investigation Steps
+## 4. Root Cause
+## 5. Mitigation / Resolution
+## 6. Verification
+## 7. References / Appendix
 ```
 
 【内容规则】
-- 中文为主，技术术语保留英文。
+- 用英文撰写报告，保留原始证据中的命令、错误信息和引用。
 - 先从笔记、截图描述、上传文件链接、对话结论中抽取关键事实，再重组
   为可读的 TSG；不要保留原始记录里混乱的换行、表格残片、复制粘贴噪音。
 - 对截图：只保留与错误、配置差异、关键证据相关的截图引用，并在图片前
@@ -221,7 +221,7 @@ _TSG_PROMPT_TEMPLATE = """\
 def summarize_to_tsg(
     raw_markdown: str,
     *,
-    title: str = "案例排查指南",
+    title: str = "Case Troubleshooting Guide",
     timeout: int = 600,
 ) -> str:
     """Run copilot CLI synchronously to produce TSG markdown.
@@ -231,7 +231,7 @@ def summarize_to_tsg(
     program, prefix = _resolve_launcher()
     if not program:
         raise RuntimeError(
-            "未找到 copilot CLI。请确认 GitHub Copilot CLI 已安装并在 PATH 中。"
+            "Copilot CLI was not found. Install GitHub Copilot CLI and ensure it is on PATH."
         )
     tmp_path: Path | None = None
     try:
@@ -252,7 +252,7 @@ def summarize_to_tsg(
             "--allow-all",
         ]
     except Exception as e:
-        raise RuntimeError(f"准备 TSG 输入文件失败: {e}") from e
+        raise RuntimeError(f"Could not prepare the TSG input file: {e}") from e
     env = _build_env()
     creationflags = 0
     if sys.platform == "win32":
@@ -269,7 +269,7 @@ def summarize_to_tsg(
         )
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(
-            f"TSG 精炼超时（>{timeout}s），可能是输入过大或网络慢。"
+            f"TSG refinement timed out (>{timeout}s). The input may be too large or the network slow."
         ) from e
     finally:
         if tmp_path is not None:
@@ -280,8 +280,8 @@ def summarize_to_tsg(
     out = result.stdout.decode("utf-8", errors="replace")
     if result.returncode != 0:
         raise RuntimeError(
-            f"copilot CLI 退出码 {result.returncode}\n"
-            f"输出尾部:\n{_strip_ansi(out)[-1500:]}"
+            f"Copilot CLI exit code: {result.returncode}\n"
+            f"Output tail:\n{_strip_ansi(out)[-1500:]}"
         )
     cleaned = _clean_cli_output(out)
     cleaned = _extract_markdown_block(cleaned)
@@ -293,7 +293,7 @@ def summarize_to_tsg(
         debug_path = _write_debug_output(out, cleaned)
         debug_note = f"\nDebug output: {debug_path}" if debug_path else ""
         raise RuntimeError(
-            "TSG 精炼输出为空或过短；原始输出尾部:\n"
+            "TSG refinement output was empty or too short. Raw output tail:\n"
             + _strip_ansi(out)[-1500:]
             + debug_note
         )

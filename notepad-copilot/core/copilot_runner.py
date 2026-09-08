@@ -70,7 +70,7 @@ def _strip_ansi(text: str) -> str:
 def _sanitize_prompt(text: str) -> str:
     # U+FFFC (object replacement char, Qt's marker for embedded images)
     # carries no meaning once the image is gone — drop it.
-    return text.replace("\ufffc", "[图片]")
+    return text.replace("\ufffc", "[image]")
 
 
 def _resolve_launcher() -> tuple[str | None, list[str]]:
@@ -245,16 +245,16 @@ class CopilotRunner(QObject):
 
     def send(self, prompt: str, attachments: list | None = None) -> bool:
         if not prompt.strip():
-            self.error_occurred.emit("请输入消息后再发送。")
+            self.error_occurred.emit("Enter a message before sending.")
             return False
         if self._program is None:
             self.error_occurred.emit(
-                "Copilot CLI 未找到。请确保 `copilot` 在 PATH 中。"
+                "Copilot CLI was not found. Make sure `copilot` is on PATH."
             )
             return False
         if self.is_running():
             self.error_occurred.emit(
-                "上一条请求仍在运行中，请等待完成或点击 [停止] 后再发送。"
+                "The previous request is still running. Wait for completion or click Stop before sending."
             )
             return False
 
@@ -338,7 +338,7 @@ class CopilotRunner(QObject):
         except Exception as e:
             _log(f"Popen failed: {e!r}")
             self._cleanup_prompt_file()
-            self.error_occurred.emit(f"启动失败: {e}")
+            self.error_occurred.emit(f"Launch failed: {e}")
             return False
         self._popen = popen
         self._start_threads(popen)

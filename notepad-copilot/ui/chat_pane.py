@@ -247,27 +247,31 @@ class ChatPane(QWidget):
         bar = QHBoxLayout(header)
         bar.setContentsMargins(12, 6, 8, 6)
         bar.setSpacing(6)
-        title = QLabel("💬  对话")
+        title = QLabel("💬  Chat")
         title.setObjectName("PaneTitle")
         bar.addWidget(title)
-        subtitle = QLabel("思考过程 · 最终回答见右侧结果区")
+        subtitle = QLabel("Progress · final answers on the right")
+        subtitle.setWordWrap(True)
         subtitle.setObjectName("FieldLabel")
         bar.addWidget(subtitle)
         bar.addStretch(1)
 
-        model_label = QLabel("模型")
+        controls = QHBoxLayout()
+        controls.setContentsMargins(12, 6, 8, 6)
+        controls.setSpacing(6)
+        model_label = QLabel("Model")
         model_label.setObjectName("FieldLabel")
-        bar.addWidget(model_label)
+        controls.addWidget(model_label)
 
         self.model_combo = QComboBox()
-        self.model_combo.addItem("用户默认", "")
+        self.model_combo.addItem("User default", "")
         self.model_combo.addItem(
             "GPT-5.6 Sol Fast (Internal only)", "gpt-5.6-sol-fast"
         )
         self.model_combo.addItem("GPT-5.6 Sol", "gpt-5.6-sol")
         self.model_combo.addItem("GPT-6 Astra", "gpt-6-astra")
         self.model_combo.setToolTip(
-            "为本窗口的后续请求显式指定模型；用户默认表示不传 --model。"
+            "Select a model for future requests in this window. User default omits --model."
         )
         saved_model = self._settings.value("copilot/model", "", type=str)
         model_index = self.model_combo.findData(saved_model)
@@ -275,13 +279,13 @@ class ChatPane(QWidget):
         self.model_combo.currentIndexChanged.connect(
             self._on_model_selection_changed
         )
-        bar.addWidget(self.model_combo)
+        controls.addWidget(self.model_combo)
 
         self.effort_combo = QComboBox()
         for effort in ("medium", "low", "high", "xhigh", "max"):
             self.effort_combo.addItem(effort, effort)
         self.effort_combo.setToolTip(
-            "对应 Copilot CLI 的 --reasoning-effort 参数。"
+            "Reasoning effort (Copilot CLI --reasoning-effort)."
         )
         saved_effort = self._settings.value(
             "copilot/reasoning_effort", "medium", type=str
@@ -291,22 +295,21 @@ class ChatPane(QWidget):
         self.effort_combo.currentIndexChanged.connect(
             self._on_model_selection_changed
         )
-        bar.addWidget(self.effort_combo)
+        controls.addWidget(self.effort_combo)
 
-        self.auto_sync_chk = QCheckBox("自动同步笔记更新")
+        self.auto_sync_chk = QCheckBox("Auto-sync notes")
         self.auto_sync_chk.setChecked(True)
         self.auto_sync_chk.setToolTip(
-            "勾选后：每次发送前自动检测笔记是否变化，"
-            "有变化就把最新笔记一起发给 Copilot。\n"
-            "取消勾选：仅首次发送带笔记，之后恢复本窗口的独立会话。"
+            "When enabled, include the latest notes whenever they change.\n"
+            "When disabled, include notes only with the first request, then resume this window's session."
         )
-        bar.addWidget(self.auto_sync_chk)
+        controls.addWidget(self.auto_sync_chk)
 
-        self.live_chk = QCheckBox("运行中插嘴")
+        self.live_chk = QCheckBox("Live input")
         self.live_chk.setToolTip(
-            "通过 Copilot SDK 在任务下一次模型请求前加入补充要求；"
-            "到达太晚会接续下一轮，不会中断已执行的工具。\n"
-            "切换模式会清除本窗口的 AI 会话；关闭后使用传统 -p 模式。"
+            "Use the Copilot SDK to add requests before the next model step. "
+            "Late messages continue in the next turn; completed tool actions are not undone.\n"
+            "Switching modes resets this window's AI session. Disable for legacy -p mode."
         )
         live_enabled = self._settings.value(
             "copilot/live_input", True, type=bool
@@ -315,26 +318,28 @@ class ChatPane(QWidget):
         self.runner.set_live_mode(live_enabled)
         self.live_chk.setEnabled(sys.version_info >= (3, 11))
         self.live_chk.toggled.connect(self._on_live_mode_changed)
-        bar.addWidget(self.live_chk)
+        controls.addWidget(self.live_chk)
+        controls.addStretch(1)
 
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel("Ready")
         self.status_label.setObjectName("StatusPill")
         self.status_label.setProperty("state", "ok")
         bar.addWidget(self.status_label)
 
-        self.reset_btn = QPushButton("清除会话")
+        self.reset_btn = QPushButton("Reset Session")
         self.reset_btn.setToolTip(
-            "结束当前会话，清空对话输出，下次发送会开启全新的 Copilot 会话"
+            "End this session and clear chat output. The next request starts a new Copilot session."
         )
         self.reset_btn.clicked.connect(self._on_reset_session)
         bar.addWidget(self.reset_btn)
 
-        self.stop_btn = QPushButton("停止")
+        self.stop_btn = QPushButton("Stop")
         self.stop_btn.setProperty("danger", True)
         self.stop_btn.clicked.connect(self._on_stop)
         bar.addWidget(self.stop_btn)
 
         layout.addWidget(header)
+        layout.addLayout(controls)
 
         # Body wrapper (inset around transcript + input)
         body = QWidget()
@@ -353,12 +358,12 @@ class ChatPane(QWidget):
 
         delivery_row = QHBoxLayout()
         self.delivery_label = QLabel(
-            "运行中可继续输入补充要求；已执行的操作不会自动撤销。"
+            "Add requests while a task runs. Completed actions are not automatically undone."
         )
         self.delivery_label.setWordWrap(True)
         self.delivery_label.setObjectName("FieldLabel")
         delivery_row.addWidget(self.delivery_label, 1)
-        self.retry_btn = QPushButton("取回未发送")
+        self.retry_btn = QPushButton("Restore Unsent")
         self.retry_btn.clicked.connect(self._restore_failed_message)
         self.retry_btn.hide()
         delivery_row.addWidget(self.retry_btn)
@@ -369,16 +374,16 @@ class ChatPane(QWidget):
         input_row.setSpacing(6)
         self.input = QLineEdit()
         self.input.setPlaceholderText(
-            "向 Copilot 提问…  (Enter 发送，首条会自动带上方笔记)"
+            "Ask Copilot… (Enter to send; the first request includes your notes)"
         )
         self.input.returnPressed.connect(self._on_send)
         input_row.addWidget(self.input, 1)
 
-        self.send_btn = QPushButton("➤  发送")
+        self.send_btn = QPushButton("➤  Send")
         self.send_btn.setProperty("accent", True)
         self.send_btn.setToolTip(
-            "首条发送会自动把上方笔记（文本+图片）作为上下文，"
-            "之后的发送恢复本窗口的独立 Copilot 会话，只发输入文本。"
+            "The first request includes your notes and images. Later requests resume "
+            "this window's session, with changed notes if auto-sync is enabled."
         )
         self.send_btn.clicked.connect(self._on_send)
         input_row.addWidget(self.send_btn)
@@ -387,7 +392,7 @@ class ChatPane(QWidget):
         layout.addWidget(body, 1)
         self._apply_model_selection()
         self._set_status(
-            "就绪" if self.runner.submissions_allowed() else "正在重置…",
+            "Ready" if self.runner.submissions_allowed() else "Resetting…",
             busy=False,
         )
 
@@ -396,11 +401,11 @@ class ChatPane(QWidget):
     def _connect_runner(self):
         self.runner.output_received.connect(self._on_output_chunk)
         self.runner.process_started.connect(
-            lambda: self._set_status("运行中…", busy=True)
+            lambda: self._set_status("Running…", busy=True)
         )
         self.runner.process_finished.connect(self._on_finished)
         self.runner.error_occurred.connect(
-            lambda msg: self._append_output(f"\n[错误] {msg}\n")
+            lambda msg: self._append_output(f"\n[Error] {msg}\n")
         )
         self.runner.message_accepted.connect(self._on_message_accepted)
         self.runner.message_rejected.connect(self._on_message_rejected)
@@ -414,7 +419,7 @@ class ChatPane(QWidget):
 
     def _on_reset_session(self):
         self.reset_session()
-        self._append_output("--- 已清除会话（下次发送将开启全新会话）---\n")
+        self._append_output("--- Session cleared. The next request starts a new session. ---\n")
 
     def reset_session(self):
         # Drop UI requests before the runner fences callbacks from the old case.
@@ -429,8 +434,8 @@ class ChatPane(QWidget):
         self._sent_image_keys.clear()
         self._last_note_hash = ""
         self.output.clear()
-        self.delivery_label.setText("会话已重置。")
-        self._set_status("就绪", busy=False)
+        self.delivery_label.setText("Session reset.")
+        self._set_status("Ready", busy=False)
 
     def _on_live_mode_changed(self, enabled: bool):
         if not self.runner.set_live_mode(enabled):
@@ -441,8 +446,8 @@ class ChatPane(QWidget):
         self._settings.setValue("copilot/live_input", enabled)
         self.reset_session()
         self.delivery_label.setText(
-            "实时会话：运行中可补充要求；到达太晚会接续下一轮。"
-            if enabled else "传统模式：不支持运行中追加，请等待完成再发送。"
+            "Live session: add requests while running; late messages continue in the next turn."
+            if enabled else "Legacy mode: wait for the task to finish before sending another request."
         )
 
     def _on_model_selection_changed(self, _index: int):
@@ -459,10 +464,10 @@ class ChatPane(QWidget):
         text = self.input.text().strip()
         if not text:
             if self.runner.is_running():
-                self.delivery_label.setText("请先输入要补充的要求。")
+                self.delivery_label.setText("Enter an additional request first.")
                 self.input.setFocus()
                 return
-            text = "请阅读上方笔记内容并给出反馈或建议。"
+            text = "Please review my notes and provide feedback or suggestions."
         self.send_requested.emit(text)
 
     @staticmethod
@@ -486,12 +491,12 @@ class ChatPane(QWidget):
               since the last send.
         """
         if self._stopping:
-            self.delivery_label.setText("正在停止，请等待完成后再发送。")
+            self.delivery_label.setText("Stopping. Wait until the task stops before sending.")
             return
         addition = self.runner.is_running() or bool(self._pending)
         if addition and not self.runner.live_mode:
             self.delivery_label.setText(
-                "传统模式不支持插嘴，请等待完成或停止后再发送。"
+                "Live input is unavailable in legacy mode. Wait for completion or stop the task first."
             )
             return
         if not addition:
@@ -541,7 +546,7 @@ class ChatPane(QWidget):
                 f"{attach_note}\n\n"
                 f"我的问题: {prompt}"
             )
-            labels.append("带笔记")
+            labels.append("with notes")
         elif embed_update_note:
             attach_note = (
                 f"\n（笔记里同时新增 {len(new_attachments)} 张图片，"
@@ -556,7 +561,7 @@ class ChatPane(QWidget):
                 f"{attach_note}\n\n"
                 f"我的问题: {prompt}"
             )
-            labels.append("笔记已更新")
+            labels.append("notes updated")
         else:
             full = prompt
 
@@ -571,17 +576,17 @@ class ChatPane(QWidget):
         full = _with_final_answer_contract(full)
 
         if new_attachments:
-            labels.append(f"+{len(new_attachments)}图")
+            labels.append(f"+{len(new_attachments)} images")
         label = f"[{' '.join(labels)}] " if labels else ""
         request_id = uuid.uuid4().hex
         self._pending[request_id] = _PendingMessage(
             prompt, cur_hash if embed_full_note or embed_update_note else None,
             new_keys, addition,
         )
-        kind = "补充" if addition else "问题"
-        self._append_output(f"\n>>> [{kind}·提交中] {label}{prompt}\n")
+        kind = "addition" if addition else "question"
+        self._append_output(f"\n>>> [{kind} · submitting] {label}{prompt}\n")
         self.delivery_label.setText(
-            f"正在提交{kind}（待确认 {len(self._pending)} 条）…"
+            f"Submitting {kind} ({len(self._pending)} awaiting confirmation)…"
         )
         draft = self.input.text()
         submitted = self.runner.submit(
@@ -590,7 +595,7 @@ class ChatPane(QWidget):
         if submitted and self.input.text() == draft:
             self.input.clear()
         elif not submitted and request_id in self._pending:
-            self._on_message_rejected(request_id, "未能提交，请检查错误信息。")
+            self._on_message_rejected(request_id, "Submission failed. Check the error details.")
 
     def _on_message_accepted(self, request_id: str):
         message = self._pending.pop(request_id, None)
@@ -602,94 +607,94 @@ class ChatPane(QWidget):
         self._task_prompts.append(message.prompt)
         self._current_question = self._task_prompts[0]
         for index, prompt in enumerate(self._task_prompts[1:], 1):
-            self._current_question += f"\n\n补充 {index}：{prompt}"
+            self._current_question += f"\n\nAdditional request {index}: {prompt}"
         description = (
-            "CLI 已接收补充，等待模型在后续步骤处理；"
-            "若当前轮已结束，将接续下一轮。"
-            if message.addition else "CLI 已接收问题，正在处理。"
+            "CLI accepted the addition for a later step. "
+            "If this turn has ended, it will continue in the next turn."
+            if message.addition else "CLI accepted the question and is processing it."
         )
-        self._append_output(f"\n[已接收] {message.prompt}\n")
+        self._append_output(f"\n[Accepted] {message.prompt}\n")
         self.delivery_label.setText(
-            f"{description} 待确认 {len(self._pending)} 条。"
+            f"{description} Awaiting confirmation: {len(self._pending)}."
         )
 
     def _on_message_rejected(self, request_id: str, reason: str):
         message = self._pending.pop(request_id, None)
         if message is None:
             return
-        self._append_output(f"\n[未送达] {message.prompt}\n{reason}\n")
-        self.delivery_label.setText(f"未送达：{reason}")
+        self._append_output(f"\n[Not delivered] {message.prompt}\n{reason}\n")
+        self.delivery_label.setText(f"Not delivered: {reason}")
         self._preserve_failed_message(message.prompt)
         if not self.runner.is_running() and not self._pending:
-            self._set_status("发送失败", busy=False)
+            self._set_status("Send failed", busy=False)
 
     def _preserve_failed_message(self, text: str):
         if not self.input.text():
             self.input.setText(text)
         elif self.input.text().strip() != text.strip():
             self._failed_messages.append(text)
-            self.retry_btn.setText(f"取回未发送 ({len(self._failed_messages)})")
+            self.retry_btn.setText(f"Restore Unsent ({len(self._failed_messages)})")
             self.retry_btn.show()
 
     def _restore_failed_message(self):
         if self.input.text().strip():
-            self.delivery_label.setText("请先发送或清空当前输入，再取回未发送内容。")
+            self.delivery_label.setText("Send or clear your current draft before restoring an unsent message.")
             return
         if self._failed_messages:
             self.input.setText(self._failed_messages.pop(0))
             self.input.setFocus()
-        self.retry_btn.setText(f"取回未发送 ({len(self._failed_messages)})")
+        self.retry_btn.setText(f"Restore Unsent ({len(self._failed_messages)})")
         self.retry_btn.setVisible(bool(self._failed_messages))
 
     def _on_runner_info(self, text: str):
-        self._append_output(f"\n[会话] {text}\n")
+        self._append_output(f"\n[Session] {text}\n")
         self.delivery_label.setText(text)
         if not self.runner.is_running():
             self._set_status(
-                "就绪" if self.runner.submissions_allowed() else "正在重置…",
+                "Ready" if self.runner.submissions_allowed() else "Resetting…",
                 busy=False,
             )
 
     def _on_stop(self):
         if self.runner.is_running():
             self._stopping = True
-            self._set_status("正在停止…", busy=True)
+            self._set_status("Stopping…", busy=True)
             self.runner.stop()
         else:
-            self._set_status("无运行中进程", busy=False)
+            self._set_status("No running task", busy=False)
 
     def _on_finished(self, code: int):
         self._stopping = False
-        self._append_output(f"\n[任务结束 code={code}]\n")
+        self._append_output(f"\n[Task ended, code={code}]\n")
         buffered_output = "".join(self._buffer)
         runner_output = self.runner.last_output()
         full_output = runner_output or buffered_output
         for request_id in list(self._pending):
             self._on_message_rejected(
-                request_id, "任务已结束，但未收到该消息的接收确认，请重新发送。"
+                request_id, "The task ended without confirming receipt of this message. Please resend it."
             )
         if code == -2:
-            self._set_status("已停止", busy=False)
+            self._set_status("Stopped", busy=False)
             self.delivery_label.setText(
-                "已停止；已执行的操作不会撤销。可继续输入要求。"
+                "Stopped. Completed actions are not undone. You can send another request."
             )
             self._buffer = []
             return
         if code != 0:
-            self._set_status("执行失败", busy=False)
+            self._set_status("Task failed", busy=False)
             # Re-send context on retry even if a failed turn persisted partially.
             self._sent_image_keys.clear()
             self._last_note_hash = ""
             if self._current_question:
                 self._preserve_failed_message(self._current_question)
-            self.delivery_label.setText("执行失败，问题已保留，未写入结果。")
+            self.delivery_label.setText("Task failed. Your question was preserved; no result was saved.")
             self._append_output(
-                "\n[本次请求失败，未写入结果；可修正问题后重新发送。]\n"
+                "\n[Request failed; no result was saved. Revise your request and try again.]\n"
             )
             self._buffer = []
             return
 
-        self._set_status("就绪", busy=False)
+        self._set_status("Ready", busy=False)
         if self.runner.live_mode:
             # Late steering can create multiple completed turns before idle.
             # Keep every marked final answer, not only the last one.
@@ -702,8 +707,8 @@ class ChatPane(QWidget):
         if answer:
             self.answer_ready.emit(self._current_question, answer)
         self.delivery_label.setText(
-            f"任务完成，本次共接收 {len(self._task_prompts)} 条消息，结果见右侧。"
-            if answer else "任务已结束，但没有可显示的最终回答。"
+            f"Task complete. {len(self._task_prompts)} messages accepted; see results on the right."
+            if answer else "Task ended without a final answer to display."
         )
         self._buffer = []
 
@@ -729,9 +734,9 @@ class ChatPane(QWidget):
         self.send_btn.setEnabled(
             ready and not self._stopping and (not busy or self.runner.live_mode)
         )
-        self.send_btn.setText("➤  补充要求" if busy else "➤  发送")
+        self.send_btn.setText("➤  Add Request" if busy else "➤  Send")
         self.input.setPlaceholderText(
-            "补充当前任务的条件或问题… (Enter 提交，已执行操作不会撤销)"
+            "Add a condition or question… (Enter to submit; completed actions are not undone)"
             if busy and self.runner.live_mode else
-            "向 Copilot 提问… (Enter 发送，首条自动带上方笔记)"
+            "Ask Copilot… (Enter to send; the first request includes your notes)"
         )

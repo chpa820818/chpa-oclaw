@@ -37,10 +37,10 @@ class EditorPane(QTextEdit):
         # Track inserted log/attachment files (non-image) for completeness.
         self._inserted_files: list[Path] = []
         self.setPlaceholderText(
-            "✍  在这里输入笔记…\n"
-            "    · Ctrl+V 粘贴截图\n"
-            "    · 拖拽图片或日志文件 (.log / .txt / .json …)\n"
-            "    · 保存为 Markdown (.md)"
+            "✍  Write your notes here…\n"
+            "    · Ctrl+V to paste screenshots\n"
+            "    · Drop images or log files (.log / .txt / .json …)\n"
+            "    · Save as Markdown (.md)"
         )
         self.setFrameShape(QTextEdit.NoFrame)
 
@@ -261,7 +261,7 @@ class EditorPane(QTextEdit):
         cursor = self.textCursor()
         cursor.insertHtml(
             f'<p>📁 <a href="{href_root}">{dest_root.name}/</a> '
-            f'<i>({len(copied)} 个文件 · {size_str})</i></p>'
+            f'<i>({len(copied)} files · {size_str})</i></p>'
         )
         # List children (cap to avoid wall-of-text on huge dumps).
         max_listed = 50
@@ -284,8 +284,8 @@ class EditorPane(QTextEdit):
             )
         if len(copied) > max_listed:
             items_html.append(
-                f'<li><i>… 另外 {len(copied) - max_listed} '
-                f'个文件未列出</i></li>'
+                f'<li><i>… {len(copied) - max_listed} more '
+                f'files not shown</i></li>'
             )
         if items_html:
             cursor.insertHtml(

@@ -98,30 +98,30 @@ def archive_session(
         qa_markdown = redactor.redact(qa_markdown)
 
     now = _dt.datetime.now()
-    title = title or "归档报告"
-    redact_badge = " (已脱敏)" if redact else ""
+    title = title or "Archive Report"
+    redact_badge = " (redacted)" if redact else ""
     header = (
         f"# {title}{redact_badge}\n\n"
-        f"_归档时间: {now.strftime('%Y-%m-%d %H:%M:%S')}_\n"
+        f"_Archived: {now.strftime('%Y-%m-%d %H:%M:%S')}_\n"
     )
     if redact:
         header += (
-            "_已对 GUID / 订阅 ID / 资源名 / 邮箱 / IP / 密钥等敏感信息脱敏；"
-            "原值映射见同目录 `redact_map.json`（请勿外发）_\n"
+            "_Sensitive data (GUIDs, subscription IDs, resource names, emails, IPs and keys) has been redacted. "
+            "Original values are in `redact_map.json` in this folder. Do not share that file._\n"
         )
     header += "\n"
     note_section = (
-        "## 📝 笔记内容\n\n"
-        f"{rewritten_note.strip() or '_（笔记区为空）_'}\n\n"
+        "## 📝 Notes\n\n"
+        f"{rewritten_note.strip() or '_(No notes)_'}\n\n"
     )
     if note_image_paths:
         kept = len([p for p in note_image_paths if p.is_file()])
         note_section += (
-            f"\n_共附带 {kept} 张图片，已保存至 `assets/` 目录_\n\n"
+            f"\n_{kept} images included in the `assets/` folder_\n\n"
         )
     qa_section = (
-        "## 💬 对话与结果\n\n"
-        f"{qa_markdown.strip() or '_（无对话）_'}\n"
+        "## 💬 Conversation and Results\n\n"
+        f"{qa_markdown.strip() or '_(No conversation)_'}\n"
     )
 
     archive_md = target_dir / "archive.md"
@@ -135,7 +135,7 @@ def archive_session(
         redacted=redact,
     )
     if not archive_html.is_file():
-        raise RuntimeError(f"HTML 归档生成失败: {archive_html}")
+        raise RuntimeError(f"HTML archive generation failed: {archive_html}")
 
     if redactor and redactor.mapping:
         (target_dir / "redact_map.json").write_text(
@@ -164,14 +164,14 @@ def archive_session(
             tsg_header = ""
             if redact:
                 tsg_header = (
-                    "> _本文档由原始排查记录脱敏后，由 Copilot 自动精炼为 "
-                    "TSG 风格。原始组合内容见 `archive.raw.md`，敏感字段映射 "
-                    "见 `redact_map.json`（请勿外发）。_\n\n"
+                    "> _Copilot refined the redacted troubleshooting records into a TSG. "
+                    "Original combined content: `archive.raw.md`. Sensitive value mappings: "
+                    "`redact_map.json` (keep private)._\n\n"
                 )
             else:
                 tsg_header = (
-                    "> _本文档由原始排查记录精炼为 TSG 风格。原始组合内容见 "
-                    "`archive.raw.md`。_\n\n"
+                    "> _Troubleshooting records refined into a TSG. Original combined content: "
+                    "`archive.raw.md`._\n\n"
                 )
             archive_md.write_text(tsg_header + tsg_md, encoding="utf-8")
         except Exception as e:  # noqa: BLE001
@@ -190,7 +190,7 @@ def archive_session(
         redacted=redact,
     )
     if not archive_html.is_file():
-        raise RuntimeError(f"HTML 归档生成失败: {archive_html}")
+        raise RuntimeError(f"HTML archive generation failed: {archive_html}")
 
     return archive_md
 
@@ -233,13 +233,13 @@ def _write_html_report(
         extensions=["extra", "sane_lists", "nl2br", "tables", "fenced_code"],
         output_format="html5",
     )
-    safe_title = _html.escape(title or "归档报告")
+    safe_title = _html.escape(title or "Archive Report")
     badge = (
-        '<span class="badge">已脱敏</span>'
-        if redacted else '<span class="badge badge-warn">未脱敏</span>'
+        '<span class="badge">Redacted</span>'
+        if redacted else '<span class="badge badge-warn">Not redacted</span>'
     )
     doc = f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

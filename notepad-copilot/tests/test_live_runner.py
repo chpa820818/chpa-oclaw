@@ -492,8 +492,8 @@ class LiveRunnerTests(unittest.TestCase):
         self.event("user.message", delivery="steering")
         self.event("user.message", delivery="queued")
         self.wait(lambda: len(self.info) == 2)
-        self.assertIn("当前任务", self.info[0])
-        self.assertIn("后续一轮", self.info[1])
+        self.assertIn("current task", self.info[0])
+        self.assertIn("later turn", self.info[1])
         self.event("session.idle")
         self.wait(lambda: self.finished == [0])
 

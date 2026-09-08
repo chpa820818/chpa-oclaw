@@ -116,7 +116,7 @@ class WikiProfile:
     def missing_fields(self) -> list[str]:
         miss = []
         if not self.name:
-            miss.append("名称")
+            miss.append("Name")
         if not self.organization:
             miss.append("Organization URL")
         if not self.project:

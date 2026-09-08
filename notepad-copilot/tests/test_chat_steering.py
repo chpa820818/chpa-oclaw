@@ -78,6 +78,9 @@ class FakeRunner(QObject):
         self.running = False
         self.history = False
 
+    def shutdown(self):
+        self.stopped = True
+
     def finish(self, text="", code=0):
         self.final = text
         self.running = False

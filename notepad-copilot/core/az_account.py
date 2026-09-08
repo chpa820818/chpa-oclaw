@@ -42,7 +42,7 @@ class AzCli:
 
     def _run(self, args: list[str], timeout: int = 30) -> str:
         if not self._exe:
-            raise RuntimeError("az CLI 未找到，请先安装 Azure CLI。")
+            raise RuntimeError("Azure CLI was not found. Install Azure CLI first.")
         argv = [self._exe, *args]
         creationflags = 0
         if os.name == "nt":
@@ -67,11 +67,11 @@ class AzCli:
                 shell=use_shell,
             )
         except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"az 调用超时: {' '.join(args)}") from e
+            raise RuntimeError(f"Azure CLI timed out: {' '.join(args)}") from e
         if res.returncode != 0:
             msg = (res.stderr or res.stdout or "").strip()
             raise RuntimeError(
-                f"az {' '.join(args)} 失败 (exit {res.returncode}): {msg}"
+                f"az {' '.join(args)} failed (exit {res.returncode}): {msg}"
             )
         return res.stdout
 
@@ -146,7 +146,7 @@ class AzCli:
         Per project rules: never use --use-device-code.
         """
         if not self._exe:
-            raise RuntimeError("az CLI 未找到。")
+            raise RuntimeError("Azure CLI was not found.")
         argv = [self._exe, "login"]
         if tenant:
             argv.extend(["--tenant", tenant])
@@ -163,11 +163,11 @@ class AzCli:
                 "set RC=%ERRORLEVEL%\r\n"
                 "echo.\r\n"
                 "if %RC% EQU 0 (\r\n"
-                "    echo === 登录成功，3 秒后窗口关闭 ===\r\n"
+                "    echo === Sign-in succeeded. This window closes in 3 seconds. ===\r\n"
                 "    timeout /t 3 >nul\r\n"
                 ") else (\r\n"
-                "    echo === 登录失败 (exit=%RC%) ===\r\n"
-                "    echo 按任意键关闭窗口...\r\n"
+                "    echo === Sign-in failed (exit=%RC%) ===\r\n"
+                "    echo Press any key to close this window...\r\n"
                 "    pause >nul\r\n"
                 ")\r\n"
             )

@@ -60,31 +60,37 @@ class ResultPane(QWidget):
         bar = QHBoxLayout(header)
         bar.setContentsMargins(12, 6, 8, 6)
         bar.setSpacing(6)
-        title = QLabel("📋  结果")
+        title = QLabel("📋  Results")
         title.setObjectName("PaneTitle")
         bar.addWidget(title)
-        self.subtitle = QLabel("AI 最终回答")
+        self.subtitle = QLabel("Final answers")
+        self.subtitle.setWordWrap(True)
         self.subtitle.setObjectName("FieldLabel")
         bar.addWidget(self.subtitle)
         bar.addStretch(1)
-        self.find_btn = QPushButton("查找")
-        self.find_btn.setToolTip("查找结果 (Ctrl+F)")
+        self.find_btn = QPushButton("Find")
+        self.find_btn.setToolTip("Find in results (Ctrl+F)")
         bar.addWidget(self.find_btn)
-        self.archive_btn = QPushButton("📦  本地归档")
+        archive_actions = QHBoxLayout()
+        archive_actions.setContentsMargins(12, 6, 8, 6)
+        archive_actions.setSpacing(6)
+        self.archive_btn = QPushButton("📦  Local Archive")
         self.archive_btn.setProperty("accent", True)
         self.archive_btn.setToolTip(
-            "脱敏后保存到案例目录\n（快捷键 Ctrl+Shift+A）")
-        bar.addWidget(self.archive_btn)
-        self.cloud_btn = QPushButton("☁  云端归档")
+            "Redact and save notes and results as local reports")
+        archive_actions.addWidget(self.archive_btn)
+        self.cloud_btn = QPushButton("☁  Cloud Archive")
         self.cloud_btn.setToolTip(
-            "脱敏后上传到 Azure DevOps Wiki\n（菜单：案例 → Wiki 配置）"
+            "Redact and upload to Azure DevOps Wiki"
         )
-        bar.addWidget(self.cloud_btn)
-        self.clear_btn = QPushButton("清空")
+        archive_actions.addWidget(self.cloud_btn)
+        archive_actions.addStretch(1)
+        self.clear_btn = QPushButton("Clear")
         self.clear_btn.setProperty("danger", True)
         self.clear_btn.clicked.connect(self.clear)
         bar.addWidget(self.clear_btn)
         layout.addWidget(header)
+        layout.addLayout(archive_actions)
 
         self.view = QTextBrowser()
         self.view.setOpenExternalLinks(True)
@@ -107,7 +113,7 @@ class ResultPane(QWidget):
         self._qa_pairs.clear()
         self._banner = ""
         self.view.clear()
-        self.subtitle.setText("AI 最终回答")
+        self.subtitle.setText("Final answers")
         _log("clear")
 
     def append_answer(self, question: str, answer: str):
@@ -116,7 +122,7 @@ class ResultPane(QWidget):
         block = (
             f"\n---\n\n"
             f"**🗨 {ts} — {question}**\n\n"
-            f"{answer.strip() or '_（无内容）_'}\n"
+            f"{answer.strip() or '_(No content)_'}\n"
         )
         self._md_parts.append(block)
         self._render()
@@ -138,7 +144,7 @@ class ResultPane(QWidget):
             self._md_parts.append(
                 f"\n---\n\n"
                 f"**🗨 {ts} — {q}**\n\n"
-                f"{a.strip() or '_（无内容）_'}\n"
+                f"{a.strip() or '_(No content)_'}\n"
             )
         self._render()
 
@@ -153,7 +159,7 @@ class ResultPane(QWidget):
         self.view.setHtml(self._to_display_html())
         count = len(self._qa_pairs)
         self.subtitle.setText(
-            f"AI 最终回答 · {count} 条" if count else "AI 最终回答"
+            f"Final answers · {count}" if count else "Final answers"
         )
         _log(f"render seq={seq} qa={count} md_chars={len(text)}")
         self._scroll_to_bottom(seq)
@@ -168,7 +174,7 @@ class ResultPane(QWidget):
             )
 
         for idx, (ts, question, answer) in enumerate(self._qa_pairs, start=1):
-            q = html.escape(question.strip() or "（无问题）")
+            q = html.escape(question.strip() or "(No question)")
             a = self._answer_to_html(answer)
             cards.append(
                 "<div class='qa-card'>"
@@ -183,7 +189,7 @@ class ResultPane(QWidget):
             )
 
         body = "\n".join(cards) if cards else (
-            "<div class='empty'>（暂无对话）</div>"
+            "<div class='empty'>(No conversation yet)</div>"
         )
         return f"""<!doctype html>
 <html>
@@ -344,7 +350,7 @@ body {{
     def _answer_to_html(self, answer: str) -> str:
         text = answer.strip()
         if not text:
-            return "<p><em>（无内容）</em></p>"
+            return "<p><em>(No content)</em></p>"
         safe_markdown = ResultPane._safe_markdown_for_html(text)
         return _markdown_to_html(
             safe_markdown,
@@ -396,8 +402,8 @@ body {{
     def to_markdown(self) -> str:
         """Render full Q&A history as a markdown string."""
         if not self._qa_pairs:
-            return "_（暂无对话）_\n"
+            return "_(No conversation yet)_\n"
         out = []
         for ts, q, a in self._qa_pairs:
-            out.append(f"### 🗨 {ts} — {q}\n\n{a or '_（无内容）_'}\n")
+            out.append(f"### 🗨 {ts} — {q}\n\n{a or '_(No content)_'}\n")
         return "\n---\n\n".join(out) + "\n"

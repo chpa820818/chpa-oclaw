@@ -36,7 +36,7 @@ class CloudArchiveDialog(QDialog):
         default_page_name: str = "",
     ):
         super().__init__(parent)
-        self.setWindowTitle("☁ 云端归档 - 上传到 Wiki")
+        self.setWindowTitle("☁ Cloud Archive - Upload to Wiki")
         self.resize(720, 460)
 
         self.profile: WikiProfile | None = None
@@ -49,14 +49,14 @@ class CloudArchiveDialog(QDialog):
         # from the URL slug and loses ancestors / encodes special chars.
         self.page_id: str = ""
 
-        self._default_page_name = default_page_name or "归档"
+        self._default_page_name = default_page_name or "Archive"
 
         layout = QVBoxLayout(self)
 
         # --- URL input ------------------------------------------------
         intro = QLabel(
-            "粘贴一个 Wiki 页面或 Wiki 根的 URL。系统会自动解析组织 / "
-            "项目 / Wiki，以及（若 URL 指向具体页面）父路径。"
+            "Paste a Wiki page or root URL to detect the organization, "
+            "project, Wiki and parent path (for page URLs)."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #656d76;")
@@ -64,7 +64,7 @@ class CloudArchiveDialog(QDialog):
 
         self.url_edit = QPlainTextEdit()
         self.url_edit.setPlaceholderText(
-            "例如：https://dev.azure.com/CSS-Mooncake/MCVKB/_wiki/wikis/"
+            "Example: https://dev.azure.com/CSS-Mooncake/MCVKB/_wiki/wikis/"
             "Mooncake-Networking-PoD.wiki/215/Welcome-to-MCVKB"
         )
         self.url_edit.setMaximumHeight(80)
@@ -75,9 +75,9 @@ class CloudArchiveDialog(QDialog):
 
         # --- parsed display ------------------------------------------
         parsed_box = QFormLayout()
-        self.org_label = QLabel("(待解析)")
-        self.project_label = QLabel("(待解析)")
-        self.wiki_label = QLabel("(待解析)")
+        self.org_label = QLabel("(not parsed)")
+        self.project_label = QLabel("(not parsed)")
+        self.wiki_label = QLabel("(not parsed)")
         for w in (self.org_label, self.project_label, self.wiki_label):
             w.setTextInteractionFlags(Qt.TextSelectableByMouse)
             w.setStyleSheet("color: #1f6feb;")
@@ -89,16 +89,17 @@ class CloudArchiveDialog(QDialog):
         # --- editable parent + page name -----------------------------
         form = QFormLayout()
         self.parent_edit = QLineEdit()
-        self.parent_edit.setPlaceholderText("/  或  /Cases  或  /Team/Drafts")
+        self.parent_edit.setPlaceholderText("/  or  /Cases  or  /Team/Drafts")
         self.parent_edit.textChanged.connect(self._update_preview)
-        form.addRow("父路径:", self.parent_edit)
+        form.addRow("Parent path:", self.parent_edit)
 
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("页面名称（不要带 /）")
+        self.name_edit.setPlaceholderText("Page name (without /)")
         self.name_edit.textChanged.connect(self._update_preview)
-        form.addRow("页面名称:", self.name_edit)
+        form.addRow("Page name:", self.name_edit)
 
-        self.preview_label = QLabel("最终页面路径：(等待输入)")
+        self.preview_label = QLabel("Page path: (waiting for input)")
+        self.preview_label.setWordWrap(True)
         self.preview_label.setStyleSheet(
             "color: #1f6feb; font-weight: 600; padding: 6px 0;"
         )
@@ -108,9 +109,9 @@ class CloudArchiveDialog(QDialog):
 
         # --- hint -----------------------------------------------------
         hint = QLabel(
-            "💡 已存在则更新，不存在则创建。\n"
-            "💡 鉴权使用当前 az 登录账户的 token；请确保对该 Wiki 有写权限。\n"
-            "💡 上传内容自动脱敏（同本地归档）。"
+            "💡 Updates an existing page or creates a new one.\n"
+            "💡 Uses the current Azure CLI account. Wiki write permission is required.\n"
+            "💡 Uploaded content is automatically redacted."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #656d76; padding: 4px 0;")
@@ -121,10 +122,10 @@ class CloudArchiveDialog(QDialog):
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
         self._ok_btn = btns.button(QDialogButtonBox.Ok)
-        self._ok_btn.setText("上传")
+        self._ok_btn.setText("Upload")
         self._ok_btn.setProperty("accent", True)
         self._ok_btn.setEnabled(False)
-        btns.button(QDialogButtonBox.Cancel).setText("取消")
+        btns.button(QDialogButtonBox.Cancel).setText("Cancel")
         btns.accepted.connect(self._on_accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
@@ -150,9 +151,9 @@ class CloudArchiveDialog(QDialog):
         # and anchors the new page under it, so the inferred parent below is
         # only a best-effort preview.
         self._url_page_id = parsed.get("page_id", "")
-        self.org_label.setText(org or "(待解析)")
-        self.project_label.setText(proj or "(待解析)")
-        self.wiki_label.setText(wiki or "(待解析)")
+        self.org_label.setText(org or "(not parsed)")
+        self.project_label.setText(proj or "(not parsed)")
+        self.wiki_label.setText(wiki or "(not parsed)")
         # If URL parsed a parent and the user hasn't edited anything yet,
         # populate parent field. We always overwrite when parsed gives a
         # value to avoid stale parent from a previous URL.
@@ -173,12 +174,12 @@ class CloudArchiveDialog(QDialog):
         if parent != "/" and parent.endswith("/"):
             parent = parent.rstrip("/")
         if not name:
-            self.preview_label.setText("最终页面路径：(请输入页面名称)")
+            self.preview_label.setText("Page path: (enter a page name)")
             self._ok_btn.setEnabled(False)
             return
         if "/" in name:
             self.preview_label.setText(
-                "最终页面路径：⚠ 页面名称不能包含 /"
+                "Page path: ⚠ Page names cannot contain /"
             )
             self._ok_btn.setEnabled(False)
             return
@@ -186,15 +187,15 @@ class CloudArchiveDialog(QDialog):
             else "/" + name
         if getattr(self, "_url_page_id", ""):
             self.preview_label.setText(
-                f"最终页面路径：上传时按 URL 页面(ID={self._url_page_id})"
-                f"的真实路径定位 → 其子页 “{name}”"
+                f"Page path: resolve the URL page (ID={self._url_page_id})"
+                f" at upload time → child page “{name}”"
             )
         else:
-            self.preview_label.setText(f"最终页面路径：{path}")
+            self.preview_label.setText(f"Page path: {path}")
         # Ok requires a fully-parsed wiki target
         ok = bool(self.org_label.text().startswith("http")
-                  and self.project_label.text() not in ("", "(待解析)")
-                  and self.wiki_label.text() not in ("", "(待解析)"))
+                  and self.project_label.text() not in ("", "(not parsed)")
+                  and self.wiki_label.text() not in ("", "(not parsed)"))
         self._ok_btn.setEnabled(ok)
 
     def _on_accept(self):
@@ -206,9 +207,9 @@ class CloudArchiveDialog(QDialog):
         wiki = parsed.get("wiki_identifier", "")
         if not (org and proj and wiki):
             QMessageBox.warning(
-                self, "URL 解析失败",
-                "无法从 URL 中解析出完整的 organization / project / wiki。\n"
-                "请确认 URL 形如：\n"
+                self, "Invalid Wiki URL",
+                "Could not detect the organization, project and Wiki from this URL.\n"
+                "Use a URL in this format:\n"
                 "  https://dev.azure.com/<org>/<project>/_wiki/wikis/"
                 "<wiki>[/...]"
             )
@@ -221,8 +222,8 @@ class CloudArchiveDialog(QDialog):
         name = self.name_edit.text().strip()
         if not name or "/" in name:
             QMessageBox.warning(
-                self, "页面名称无效",
-                "请输入有效的页面名称（不能为空，不能包含 /）"
+                self, "Invalid Page Name",
+                "Enter a nonempty page name without /."
             )
             return
         page_path = (parent.rstrip("/") + "/" + name) if parent != "/" \

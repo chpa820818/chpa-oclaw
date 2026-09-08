@@ -75,10 +75,10 @@ def sanitize_case_id(raw: str) -> str:
     """Make `raw` safe for use as a directory name."""
     raw = (raw or "").strip()
     if not raw:
-        raise ValueError("case id 不能为空")
+        raise ValueError("Case ID cannot be empty.")
     cleaned = _SAFE_RE.sub("-", raw).strip("-._")
     if not cleaned:
-        raise ValueError(f"case id '{raw}' 处理后为空，请使用字母/数字/-_")
+        raise ValueError(f"Case ID '{raw}' is empty after sanitization. Use letters, numbers, - or _.")
     return cleaned[:80]
 
 
@@ -183,7 +183,7 @@ def create_case(raw_id: str, title: str = "") -> Case:
     case_id = sanitize_case_id(raw_id)
     root = get_case_root() / case_id
     if root.exists():
-        raise FileExistsError(f"案例 '{case_id}' 已存在: {root}")
+        raise FileExistsError(f"Case '{case_id}' already exists: {root}")
     now = _dt.datetime.now().isoformat(timespec="seconds")
     case = Case(case_id=case_id, root=root, title=title or case_id,
                 created=now, updated=now)
@@ -191,7 +191,7 @@ def create_case(raw_id: str, title: str = "") -> Case:
     case.save_meta()
     if not case.note_path.exists():
         case.note_path.write_text(
-            f"# {case.title}\n\n_案例创建于 {now}_\n\n",
+            f"# {case.title}\n\n_Case created on {now}_\n\n",
             encoding="utf-8",
         )
     return case
@@ -207,7 +207,7 @@ def open_case(case_id_or_path: str | Path) -> Case:
         case_id = sanitize_case_id(str(case_id_or_path))
         root = get_case_root() / case_id
     if not root.is_dir():
-        raise FileNotFoundError(f"案例不存在: {root}")
+        raise FileNotFoundError(f"Case does not exist: {root}")
     title = case_id
     created = ""
     updated = ""

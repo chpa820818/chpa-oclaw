@@ -43,20 +43,20 @@ def get_access_token() -> str:
         )
     except FileNotFoundError as e:
         raise RuntimeError(
-            "未找到 az CLI，无法获取 ADO token；请先安装 Azure CLI 并 az login。"
+            "Azure CLI was not found. Install it and run az login to obtain an ADO token."
         ) from e
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError("az get-access-token 超时") from e
+        raise RuntimeError("az get-access-token timed out") from e
     if cp.returncode != 0:
         raise RuntimeError(
-            f"az get-access-token 失败 (rc={cp.returncode}):\n"
+            f"az get-access-token failed (rc={cp.returncode}):\n"
             f"{cp.stderr.strip() or cp.stdout.strip()}"
         )
     try:
         data = json.loads(cp.stdout)
         return data["accessToken"]
     except Exception as e:  # noqa: BLE001
-        raise RuntimeError(f"无法解析 az 输出: {e}\n{cp.stdout[:500]}") from e
+        raise RuntimeError(f"Could not parse Azure CLI output: {e}\n{cp.stdout[:500]}") from e
 
 
 # --------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def upload_attachment(profile: WikiProfile, token: str,
         # Already exists — just point to the canonical URL
         return f"/.attachments/{name}"
     raise RuntimeError(
-        f"上传附件 {name} 失败 (HTTP {code}): "
+        f"Attachment upload failed for {name} (HTTP {code}): "
         f"{body.decode('utf-8', errors='replace')[:400]}"
     )
 
@@ -222,7 +222,7 @@ def ensure_ancestor_pages(
     token: str,
     page_path: str,
     *,
-    placeholder: str = "_(自动生成的占位页面)_\n",
+    placeholder: str = "_(Automatically generated placeholder page)_\n",
 ) -> list[str]:
     """Ensure every ancestor page of ``page_path`` exists.
 
@@ -267,7 +267,7 @@ def ensure_ancestor_pages(
             created.append(ancestor)
         else:
             raise RuntimeError(
-                f"创建父页面 '{ancestor}' 失败 (HTTP {code}):\n"
+                f"Could not create parent page '{ancestor}' (HTTP {code}):\n"
                 f"{resp.decode('utf-8', errors='replace')[:400]}"
             )
     return created
@@ -290,7 +290,7 @@ def upload_archive(
     filename so multiple cases don't collide (e.g. case_id + timestamp).
     """
     if not profile.is_complete():
-        raise ValueError("Wiki 配置不完整：name/org/project/wiki 必填")
+        raise ValueError("Incomplete Wiki settings: name/org/project/wiki are required.")
 
     archive_md_path = Path(archive_md_path)
     if not archive_md_path.is_file():
@@ -333,9 +333,9 @@ def upload_archive(
         ensure_ancestor_pages(profile, token, page_path)
     except RuntimeError as e:
         raise RuntimeError(
-            f"创建父页面失败：{e}\n"
-            f"提示：请确认你对该 Wiki 有写权限，并且页面路径 '{page_path}' "
-            f"中不含非法字符（如 ':' '?' '#' 等）。"
+            f"Could not create parent pages: {e}\n"
+            f"Check your Wiki write permission and ensure page path '{page_path}' "
+            f"contains no invalid characters (such as ':' '?' '#')."
         ) from e
 
     # 4) PUT the page
@@ -343,7 +343,7 @@ def upload_archive(
     code, body = put_page(profile, token, page_path, md)
     if code not in (200, 201):
         raise RuntimeError(
-            f"上传 wiki 页面失败 (HTTP {code}):\n{body[:600]}"
+            f"Wiki page upload failed (HTTP {code}):\n{body[:600]}"
         )
 
     page_url = (

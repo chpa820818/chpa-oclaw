@@ -3,9 +3,39 @@
 > Windows 桌面工具：把"OneNote 风格的笔记"和"GitHub Copilot CLI 交互"放在同一个窗口里，
 > 按"案例 (Case)"组织内容，方便排障/调研工作流的全流程记录与归档。
 
-**当前发布版本**：[`v0.1.3`](https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.3)
+**当前发布版本**：[`v0.1.4`](https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.4)
 
-**下载发布包**：[`notepad-copilot-v0.1.3.zip`](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.3/notepad-copilot-v0.1.3.zip)
+**下载发布包**：[`notepad-copilot-v0.1.4.zip`](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.4/notepad-copilot-v0.1.4.zip)
+
+## v0.1.4 — English UI and Hackathon Showcase
+
+Menus, buttons, search controls, status messages, Azure account controls, and
+archive/Wiki dialogs now use English. Header layouts accommodate the longer
+English labels. Existing notes and conversation history remain unchanged;
+user content and AI responses can still be multilingual.
+
+- **Live input** enables **Add Request** while a task is running.
+- **Restore Unsent**, **Stop**, and **Reset Session** retain their existing behavior.
+- Fresh archive templates use English headings.
+- Browser-style search and persistent, per-window conversations remain available.
+
+### Project images and video
+
+[Watch or download the narrated demo (MP4)](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.4/04-notepad-copilot-demo.mp4)
+— 97 seconds, 1080p, English narration and burned-in captions.
+
+The showcase uses the actual English application UI with fictional case data and
+simulated AI responses. It is an illustrated walkthrough, not a live AI execution
+recording, and contains no customer data. The images retain their "English UI
+preview" caption from the showcase capture.
+
+![Notepad Copilot project cover](media/hackathon/01-project-cover.png)
+![English workspace overview](media/hackathon/02-workspace-overview.png)
+![Add a requirement while a task runs](media/hackathon/03-live-guidance.png)
+
+[Browse all showcase files](media/hackathon) ·
+[English subtitles](media/hackathon/05-english-captions.srt) ·
+[Download the complete media pack](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.4/notepad-copilot-media-v0.1.4.zip)
 
 ---
 
@@ -27,26 +57,26 @@
 
 ### 笔记 / 结果区查找
 
-- 点击区域标题栏「查找」，或在对应区域按 `Ctrl+F`；选中文字可自动填入。
+- 点击区域标题栏 **Find**，或在对应区域按 `Ctrl+F`；选中文字可自动填入。
 - 实时、不区分大小写搜索；全部匹配高亮，当前匹配以橙色标记，并显示位置/总数。
 - `Enter` / `F3` 下一个，`Shift+Enter` / `Shift+F3` 上一个，首尾循环；`Esc` 关闭。
 - 两个区域独立查找；高亮不会改变保存内容、富文本格式或撤销记录。
 
 ### 运行中插嘴
 
-默认开启「运行中插嘴」。任务运行时继续输入，按 Enter 或点击「补充要求」，
+默认开启 **Live input**。任务运行时继续输入，按 Enter 或点击 **Add Request**，
 即可向同一任务发送新条件或问题。GPT-5.6 和 GPT-6 均可使用，不要求 GPT-6 专属 API。
 
 - 界面区分提交中、CLI 已接收、未送达，并根据运行时事件提示当前任务或后续轮次。
 - SDK 使用 `mode="immediate"`：补充在下一次模型请求前加入；到达太晚会接续下一轮。
-- 原问题与已接收的补充一起保留在结果和案例历史；未送达内容保留在输入框或「取回未发送」中。
-- 首条自动携带笔记和图片；开启「自动同步笔记更新」时，后续发送/补充会携带更新内容。
-- 「停止」取消任务并清理队列；「清除会话」创建新会话。切换会话模式也会重置 AI 上下文，但不删除笔记或已归档结果。
+- 原问题与已接收的补充一起保留在结果和案例历史；未送达内容保留在输入框或 **Restore Unsent** 中。
+- 首条自动携带笔记和图片；开启 **Auto-sync notes** 时，后续发送/补充会携带更新内容。
+- **Stop** 取消任务并清理队列；**Reset Session** 创建新会话。切换会话模式也会重置 AI 上下文，但不删除笔记或已归档结果。
 - 支持用户默认、GPT-5.6 Sol / Sol Fast、GPT-6 Astra；实际可用模型以 Copilot 账户权限为准。
 
 **边界**：这是 Copilot CLI 任务循环层的 steering，不会改写已发出的单次推理请求，
-也不会即时中断或撤销已提交的工具操作。紧急情况应点击「停止」，不要依赖补充消息阻止操作。
-关闭「运行中插嘴」后回到传统 `copilot -p` 模式，不支持运行中追加。
+也不会即时中断或撤销已提交的工具操作。紧急情况应点击 **Stop**，不要依赖补充消息阻止操作。
+关闭 **Live input** 后回到传统 `copilot -p` 模式，不支持运行中追加。
 
 ### 升级要求
 
@@ -107,8 +137,8 @@ cd chpa-oclaw\notepad-copilot
 
 **方式 D · 下载发布包 ZIP**（无需任何命令行工具，推荐给普通用户）
 
-1. 打开最新发布页：https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.3
-2. 下载 **`notepad-copilot-v0.1.3.zip`**
+1. 打开最新发布页：https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.4
+2. 下载 **`notepad-copilot-v0.1.4.zip`**
 3. 解压后进入 `notepad-copilot\` 目录
 
 ---
