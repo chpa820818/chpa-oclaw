@@ -3,9 +3,20 @@
 > Windows 桌面工具：把"OneNote 风格的笔记"和"GitHub Copilot CLI 交互"放在同一个窗口里，
 > 按"案例 (Case)"组织内容，方便排障/调研工作流的全流程记录与归档。
 
-**当前发布版本**：[`v0.1.4`](https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.4)
+**当前发布版本**：[`v0.1.5`](https://github.com/chpa820818/chpa-oclaw/releases/tag/v0.1.5)
 
-**下载发布包**：[`notepad-copilot-v0.1.4.zip`](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.4/notepad-copilot-v0.1.4.zip)
+**下载发布包**：[`notepad-copilot-v0.1.5.zip`](https://github.com/chpa820818/chpa-oclaw/releases/download/v0.1.5/notepad-copilot-v0.1.5.zip)
+
+## v0.1.5 — Concise Answers and Explain More
+
+- 普通问题默认先给结论和关键信息，通常为 1–2 个短段落；中文正文以约 150–300 字为目标，不硬截断内容。
+- 保留关键错误码、必要依据、风险和不确定性；明确要求的完整代码、查询或报告不受简答目标限制。
+- 结果区 **Explain More** 针对**最近一条回答**发送一次新的 AI 请求，补充依据、步骤与限制；不是展开预先隐藏的文本，会产生一次新的请求用量。
+- 详细结果追加显示，原答案不变；有打开的案例时，沿用 Q&A 历史保存、重开和归档流程。已有历史不会自动压缩。
+- 保留输入框草稿；无回答、提交中、运行中或会话重置未完成时不可展开。失败后可再次点击，或使用原有的 **Restore Unsent** 恢复问题。
+- 展开仅对该轮使用详细模式，下一次普通提问恢复简答。Live 和 Legacy 模式均支持，已加载的历史回答也可展开。
+
+升级时保留案例文件夹和配置，更新应用文件后重新启动。此版本没有新增依赖；界面保持英文。
 
 ## v0.1.4 — English UI and Hackathon Showcase
 
@@ -45,7 +56,7 @@ preview" caption from the showcase capture.
 |---|---|
 | 📝 **笔记编辑器**（顶部） | 富文本 + Markdown 兼容；`Ctrl+V` 粘贴截图；多目标拖拽/上传文件、文件夹及子目录；附件自动落到 `<case>/.attachments/` |
 | 🤖 **Copilot 交互区**（底部） | 默认通过 SDK 保持每窗口独立会话，支持运行中补充要求；可切换传统 `--name` / `--resume` 模式 |
-| 📊 **结果区**（右侧） | HTML 呈现完整回答，保留 Markdown 结构；自动汇总 Q&A，可导出 Markdown |
+| 📊 **结果区**（右侧） | 默认简答，点击 **Explain More** 按需补充详细解释；保留 Markdown 结构，自动汇总 Q&A，可导出 Markdown |
 | 🗂 **案例 (Case)** | 三选项菜单：新建 / 打开 / 关闭；列表按"最后修改"倒序；每个案例独立 UI 窗口 |
 | 🔐 **多 Azure 账户** | 内置 `az` 账户切换栏，支持 Global / China 双云、多账户共存 |
 | ☁️ **归档** | 一键归档当前案例到本地 ZIP 或 Azure DevOps Wiki；带敏感信息脱敏（订阅 ID、Key、Bearer Token、邮箱等） |

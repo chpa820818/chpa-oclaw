@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -48,8 +48,11 @@ def _log(msg: str) -> None:
 class ResultPane(QWidget):
     """Displays only the final, cleaned-up answers from Copilot."""
 
+    expand_requested = Signal(str, str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._expansion_available = False
         self.setObjectName("Card")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -71,6 +74,13 @@ class ResultPane(QWidget):
         self.find_btn = QPushButton("Find")
         self.find_btn.setToolTip("Find in results (Ctrl+F)")
         bar.addWidget(self.find_btn)
+        self.expand_btn = QPushButton("Explain More")
+        self.expand_btn.setToolTip(
+            "Explain the latest answer in more detail (sends a new AI request)"
+        )
+        self.expand_btn.setEnabled(False)
+        self.expand_btn.clicked.connect(self._on_expand)
+        bar.addWidget(self.expand_btn)
         archive_actions = QHBoxLayout()
         archive_actions.setContentsMargins(12, 6, 8, 6)
         archive_actions.setSpacing(6)
@@ -114,7 +124,22 @@ class ResultPane(QWidget):
         self._banner = ""
         self.view.clear()
         self.subtitle.setText("Final answers")
+        self._update_expand_button()
         _log("clear")
+
+    def set_expansion_available(self, available: bool) -> None:
+        self._expansion_available = available
+        self._update_expand_button()
+
+    def _update_expand_button(self) -> None:
+        has_answer = bool(self._qa_pairs and self._qa_pairs[-1][2].strip())
+        self.expand_btn.setEnabled(self._expansion_available and has_answer)
+
+    def _on_expand(self) -> None:
+        if not self.expand_btn.isEnabled():
+            return
+        _, question, answer = self._qa_pairs[-1]
+        self.expand_requested.emit(question, answer)
 
     def append_answer(self, question: str, answer: str):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
@@ -161,6 +186,7 @@ class ResultPane(QWidget):
         self.subtitle.setText(
             f"Final answers · {count}" if count else "Final answers"
         )
+        self._update_expand_button()
         _log(f"render seq={seq} qa={count} md_chars={len(text)}")
         self._scroll_to_bottom(seq)
 

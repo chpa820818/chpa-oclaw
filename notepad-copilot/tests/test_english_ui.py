@@ -3,6 +3,7 @@ import ast
 import os
 from pathlib import Path
 import re
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from test_chat_steering import FakeRunner, FakeSettings, marked
 from core.archive import _write_html_report
+from core.case_store import Case, open_case
 from core.tsg_summarizer import _ensure_tsg_structure, _TSG_PROMPT_TEMPLATE
 from core.wiki_config import WikiConfig
 from ui.archive_dialogs import ArchiveOptionsDialog, ArchiveProgressDialog
@@ -259,6 +261,101 @@ class EnglishUiTests(unittest.TestCase):
         self.assertEqual(self.window.result.qa_pairs(), history)
         self.assertIn("原始答案", self.window.result.to_markdown())
         self.assertEqual(self.window.result.subtitle.text(), "Final answers · 1")
+
+    def test_expand_latest_answer_in_both_modes_and_preserve_draft(self):
+        pane = self.window.chat
+        result = self.window.result
+        runner = pane.runner
+        for live_mode in (True, False):
+            with self.subTest(live_mode=live_mode):
+                pane.reset_session()
+                runner.live_mode = live_mode
+                result.load_qa_history([
+                    ("09:00", "Older question", "Older answer"),
+                    ("10:00", "Latest question", "Brief answer"),
+                ])
+                self.window.editor.setPlainText("Current evidence")
+                pane.input.setText("Unsent next question")
+                self.assertTrue(result.expand_btn.isEnabled())
+                self.assertButtonsFit(self.window)
+                index = len(runner.requests)
+                result.expand_btn.click()
+                self.assertFalse(result.expand_btn.isEnabled())
+                self.assertEqual(pane.input.text(), "Unsent next question")
+                prompt = runner.requests[index][1]
+                self.assertIn("Latest question", prompt)
+                self.assertIn("Brief answer", prompt)
+                self.assertIn("Current evidence", prompt)
+                self.assertIn("本轮为按需展开", prompt)
+                self.assertNotIn("Older answer", prompt)
+                result.expand_btn.click()
+                self.assertEqual(len(runner.requests), index + 1)
+                runner.accept(index)
+                runner.finish(marked("Detailed evidence and steps"))
+                self.assertEqual(len(result.qa_pairs()), 3)
+                self.assertEqual(result.qa_pairs()[1][2], "Brief answer")
+                self.assertEqual(result.qa_pairs()[2][1:], (
+                    "Explain more: Latest question", "Detailed evidence and steps",
+                ))
+                self.assertTrue(result.expand_btn.isEnabled())
+                self.assertIn("Detailed evidence and steps", result.to_markdown())
+
+    def test_expand_empty_clear_failure_stop_and_reset(self):
+        pane = self.window.chat
+        result = self.window.result
+        runner = pane.runner
+        self.assertFalse(result.expand_btn.isEnabled())
+        result.append_answer("No answer", " ")
+        self.assertFalse(result.expand_btn.isEnabled())
+        result.load_qa_history([("10:00", "Question", "Summary")])
+        pane.input.setText("Keep draft")
+        result.expand_btn.click()
+        runner.accept(0)
+        runner.finish(marked("Partial"), code=1)
+        self.assertEqual(len(result.qa_pairs()), 1)
+        self.assertEqual(pane.input.text(), "Keep draft")
+        self.assertTrue(result.expand_btn.isEnabled())
+        result.expand_btn.click()
+        runner.accept(1)
+        pane._on_stop()
+        self.assertFalse(result.expand_btn.isEnabled())
+        runner.finish(code=-2)
+        self.assertTrue(result.expand_btn.isEnabled())
+        self.assertEqual(len(result.qa_pairs()), 1)
+        with patch.object(runner, "submissions_allowed", return_value=False):
+            pane.reset_session()
+            self.assertFalse(result.expand_btn.isEnabled())
+        runner.info_received.emit("Session ready")
+        self.assertTrue(result.expand_btn.isEnabled())
+        result.clear()
+        self.assertFalse(result.expand_btn.isEnabled())
+        result.load_qa_history([("11:00", "Different case", "Other answer")])
+        result.expand_btn.click()
+        self.assertIn("Other answer", runner.requests[-1][1])
+        self.assertNotIn("Summary", runner.requests[-1][1])
+
+    def test_expand_persists_and_reopens_case_history(self):
+        scratch = ROOT.parents[2] / "copilot-temp" / "sessions"
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="answer-depth-", dir=scratch) as folder:
+            case = Case(case_id="answer-depth", root=Path(folder))
+            self.window._current_case = case
+            self.window._on_qa_ready("Question", "Brief answer")
+            self.window.result.expand_btn.click()
+            self.window.chat.runner.accept(0)
+            self.window.chat.runner.finish(marked("Detailed answer"))
+            self.window._current_case = None
+            reopened = open_case(folder)
+            history = reopened.read_qa()
+            self.assertEqual([item[1:] for item in history], [
+                ("Question", "Brief answer"),
+                ("Explain more: Question", "Detailed answer"),
+            ])
+            self.window.result.clear()
+            self.window.result.load_qa_history(history)
+            self.assertTrue(self.window.result.expand_btn.isEnabled())
+            self.assertIn("Brief answer", self.window.result.to_markdown())
+            self.assertIn("Detailed answer", self.window.result.to_markdown())
 
     def test_generated_report_labels_are_english(self):
         with patch.object(Path, "read_text", return_value="## Notes\n\nUser content"), patch.object(

@@ -202,6 +202,9 @@ class MainWindow(QMainWindow):
 
         self.chat.send_requested.connect(self._on_send)
         self.chat.answer_ready.connect(self._on_qa_ready)
+        self.chat.expansion_available.connect(self.result.set_expansion_available)
+        self.result.expand_requested.connect(self._on_expand_answer)
+        self.result.set_expansion_available(self.chat.can_expand())
         self.result.archive_btn.clicked.connect(self._on_archive)
         self.result.cloud_btn.clicked.connect(self._on_cloud_archive)
         self.az_bar.account_changed.connect(
@@ -387,6 +390,20 @@ class MainWindow(QMainWindow):
         text = self.editor.toPlainText()
         images = self.editor.collect_image_paths()
         self.chat.send(prompt, note=text, attachments=images)
+
+    def _on_expand_answer(self, question: str, answer: str):
+        if not self.chat.can_expand():
+            self.statusBar().showMessage(
+                "Wait for the current task or session reset before expanding an answer.",
+                5000,
+            )
+            return
+        self.chat.send(
+            f"Explain more: {question}",
+            note=self.editor.toPlainText(),
+            attachments=self.editor.collect_image_paths(),
+            detailed=True, answer_context=answer, preserve_draft=True,
+        )
 
     # --- archive ------------------------------------------------------
 
