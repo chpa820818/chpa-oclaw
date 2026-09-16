@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
 
 from wenquxing_v2.copilot import CopilotRunner
 
@@ -57,3 +58,27 @@ def test_delete_session_removes_only_target_copilot_data(
                 ("keep",)
             ]
     assert not state_dir.exists()
+
+
+def test_ask_passes_only_explicit_attachments(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.extend(command)
+        return SimpleNamespace(returncode=0, stdout="已分析", stderr="")
+
+    monkeypatch.setattr("wenquxing_v2.copilot.subprocess.run", fake_run)
+    attachment = tmp_path / "report.txt"
+    attachment.write_text("data", encoding="utf-8")
+    runner = CopilotRunner(tmp_path / "copilot.exe", tmp_path / "work", 30)
+
+    assert runner.ask("session", "分析", [attachment]) == "已分析"
+    assert "--attachment" in captured
+    assert str(attachment.resolve()) in captured
+    assert "--allow-tool=write" in captured
+    assert "--deny-tool=shell" in captured
+    assert "--deny-url=*" in captured
+    assert not any(item.startswith("--available-tools") for item in captured)
+    assert "--allow-all-paths" not in captured

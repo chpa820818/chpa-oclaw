@@ -40,10 +40,11 @@ App ID 通常以 `cli_` 开头。App Secret 只用于本机换取应用访问令
 |---|---|---|
 | `im:message.p2p_msg:readonly` | 读取用户发给机器人的单聊消息 | 接收本人私聊消息 |
 | `im:message:send_as_bot` | 以应用的身份发消息 | 回复文本、卡片和主动上线通知 |
+| `im:message` | 获取与发送单聊、群组消息 | 下载消息中的图片、视频和文件资源 |
 
-部分飞书租户会同时提示开通基础消息权限 `im:message`（读取和发送消息）。只有在权限页面或
-API 报错明确要求时再添加，避免申请群消息、通讯录、文件等无关权限。若组织启用了审批，
-提交权限申请并等待管理员批准。
+`im:message` 是飞书“获取消息中的资源文件”接口要求的权限之一；文曲星虽然具备该接口
+权限，程序仍会在本地强制拒绝群聊和非本人消息。无需申请通讯录、云文档或云盘权限。若组织
+启用了审批，提交权限申请并等待管理员批准。
 
 权限变更必须随新的应用版本发布才会对线上机器人生效。文曲星不需要
 `im:message.group_at_msg:readonly`，因为当前版本拒绝群聊消息。
@@ -145,7 +146,40 @@ WX_V2_DATA_DIR=
 WX_COPILOT_CLI=
 WX_COPILOT_TIMEOUT_SECONDS=180
 WX_V2_WORKER_COUNT=4
+WX_ATTACHMENT_MAX_MB=50
+WX_ATTACHMENT_EXTRACT_MAX_MB=100
+WX_ATTACHMENT_ARCHIVE_MAX_FILES=12
 WX_V2_LOG_LEVEL=INFO
 ```
 
 禁止将真实配置复制到源码目录、网盘共享目录、Issue 或日志。
+
+## 11. 附件支持与限制
+
+| 类型 | 处理方式 |
+|---|---|
+| PNG、JPEG、GIF、WEBP、BMP | 保存到会话目录，并作为原生图片附件交给 Copilot |
+| PDF、DOCX、PPTX、XLSX | 保存到会话目录，使用 Copilot CLI 原生文档附件 |
+| TXT、Markdown、CSV、JSON、日志及常见代码 | 保存后由 Copilot 文件工具自行处理 |
+| MP4、MOV、AVI、MKV、WEBM、M4V | 提取前 120 秒内最多 8 张视觉关键帧 |
+| ZIP | 原包保留在会话目录，安全解压后由 Copilot 分析支持的文件 |
+
+默认单个下载文件不超过 50 MB，ZIP 解压后不超过 100 MB、最多 12 个文件。ZIP 中的
+可执行文件、符号链接、嵌套压缩包、路径穿越和疑似压缩炸弹会被拒绝或跳过；任何内容都不会
+执行。视频目前只分析画面，不转录音轨；RAR、7Z 和加密 ZIP 暂不支持。
+
+每个文曲星会话对应一个稳定目录：
+
+```text
+%LOCALAPPDATA%\Wenquxing\v02\sessions\<内部会话标识>\
+└─ files\<消息哈希>\
+   ├─ 用户上传的原始文件
+   └─ extracted / *-frames-*（需要时生成）
+```
+
+会话改名不会改变目录；隐藏会话会保留目录；永久删除会一并删除该会话目录。Copilot 每次
+调用都以 `sessions` 作为受管工作根，可对所有文曲星会话目录执行读取、创建、修改、移动
+和删除。目录外路径、Shell、网络、飞书凭据及其他本机文件仍不可访问。
+
+飞书资源下载接口若返回 `234009`，表示 `im:message` 等必要权限未生效；检查权限审批，
+创建新版本并重新发布应用。

@@ -28,6 +28,39 @@ def test_message_is_idempotent_and_bound_to_current_session(tmp_path: Path) -> N
     assert second.session_id == created.id
 
 
+def test_attachment_is_persisted_and_bound_to_current_session(
+    tmp_path: Path,
+) -> None:
+    store = make_store(tmp_path)
+    service = ConversationService(store)
+
+    assert service.accept_attachment(
+        "m-file", "owner", "chat", "file", "file-key", "report.zip"
+    )
+    job = store.claim_jobs(1)[0]
+
+    assert job.attachment_type == "file"
+    assert job.attachment_key == "file-key"
+    assert job.attachment_name == "report.zip"
+    assert job.session_id == store.current_session("owner", "chat").id
+    assert not service.accept_attachment(
+        "m-file", "owner", "chat", "file", "other-key", "duplicate.zip"
+    )
+
+
+def test_each_session_has_a_stable_local_directory(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    first = store.current_session("owner", "chat")
+    second = store.create_session("owner", "chat", "项目文件")
+
+    assert (tmp_path / "sessions" / first.public_id).is_dir()
+    assert (tmp_path / "sessions" / second.public_id).is_dir()
+
+    store.rename_session("owner", "chat", second.public_id, "改名后")
+
+    assert (tmp_path / "sessions" / second.public_id).is_dir()
+
+
 def test_session_commands_and_memory_reset(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     service = ConversationService(store)
@@ -183,6 +216,30 @@ def test_permanent_delete_removes_messages_and_copilot_session(
     assert store.find_session("owner", "chat", target.public_id) is None
     assert copilot.deleted == [target.copilot_session_id]
     assert not store.is_received("m1")
+
+
+def test_permanent_delete_removes_managed_attachment_files(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    service = ConversationService(store, FakeCopilot())  # type: ignore[arg-type]
+    target = store.current_session("owner", "chat")
+    service.accept_attachment(
+        "m-file", "owner", "chat", "file", "file-key", "report.txt"
+    )
+    directory = (
+        tmp_path
+        / "sessions"
+        / target.public_id
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "report.txt").write_text("content", encoding="utf-8")
+
+    service.card_action(
+        "owner",
+        "chat",
+        {"action": "permanent_delete_session", "session": target.public_id},
+    )
+
+    assert not directory.exists()
 
 
 def test_session_card_does_not_display_public_ids(tmp_path: Path) -> None:

@@ -8,6 +8,7 @@
 | 私有配置 | `%LOCALAPPDATA%\Wenquxing\secrets\v02.env` |
 | SQLite | `%LOCALAPPDATA%\Wenquxing\v02\wenquxing-v02.sqlite3` |
 | 日志 | `%LOCALAPPDATA%\Wenquxing\v02\wenquxing-v02.log` |
+| 会话文件目录 | `%LOCALAPPDATA%\Wenquxing\v02\sessions\<内部会话标识>` |
 | Copilot 会话 | `%USERPROFILE%\.copilot` |
 
 日志自动轮转，单文件上限 5 MB，保留 3 份。SDK 使用 WARNING 级别，避免把临时 WebSocket
@@ -34,6 +35,9 @@ $env:WX_V2_CONFIG="$env:LOCALAPPDATA\Wenquxing\secrets\v02.env"
 | Copilot CLI 退出码非 0 | 运行 `copilot -p "测试" --silent` 检查登录、网络和额度 |
 | `文曲星 v02 已在运行` | 单实例锁正常；不要重复启动 |
 | 永久删除被拒绝 | 目标会话仍在处理消息，等待回复完成后重试 |
+| 附件下载错误 `234009` | 开通 `im:message` 权限并发布新应用版本 |
+| 视频只返回画面结论 | 当前仅提取视觉关键帧，不包含音轨转录 |
+| ZIP 被拒绝 | 检查体积、文件数、加密、路径穿越或压缩炸弹限制 |
 
 ## 升级
 

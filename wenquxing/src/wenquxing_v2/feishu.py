@@ -8,6 +8,7 @@ import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
     CreateMessageRequest,
     CreateMessageRequestBody,
+    GetMessageResourceRequest,
     P2ImMessageReceiveV1,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
@@ -126,6 +127,24 @@ class FeishuGateway:
                 f"log_id={response.get_log_id()}"
             )
 
+    def download_resource(
+        self, message_id: str, resource_key: str, resource_type: str
+    ) -> tuple[bytes, str | None]:
+        request = (
+            GetMessageResourceRequest.builder()
+            .message_id(message_id)
+            .file_key(resource_key)
+            .type(resource_type)
+            .build()
+        )
+        response = self.client.im.v1.message_resource.get(request)
+        if not response.success() or response.file is None:
+            raise FeishuError(
+                f"飞书附件下载失败 code={response.code}, msg={response.msg}, "
+                f"log_id={response.get_log_id()}"
+            )
+        return response.file.read(), response.file_name
+
     def _on_message(self, data: P2ImMessageReceiveV1) -> None:
         try:
             event = data.event
@@ -141,6 +160,30 @@ class FeishuGateway:
             ):
                 logger.warning("Rejected unauthorized or non-p2p message")
                 return
+            payload = json.loads(message.content or "{}")
+            if not isinstance(payload, dict):
+                raise ValueError("Feishu message content must be an object")
+            if message.message_type in {"image", "file", "media"}:
+                attachment = _attachment_details(message.message_type, payload)
+                if attachment is None:
+                    self.service.accept_notice(
+                        message.message_id,
+                        open_id,
+                        message.chat_id,
+                        f"[{message.message_type} message]",
+                        "附件消息缺少资源标识，无法下载。",
+                    )
+                    return
+                resource_key, file_name = attachment
+                self.service.accept_attachment(
+                    message.message_id,
+                    open_id,
+                    message.chat_id,
+                    message.message_type,
+                    resource_key,
+                    file_name,
+                )
+                return
             if message.message_type != "text":
                 self.service.accept_notice(
                     message.message_id,
@@ -150,7 +193,6 @@ class FeishuGateway:
                     "当前版本仅支持文本消息。",
                 )
                 return
-            payload = json.loads(message.content or "{}")
             text = str(payload.get("text", "")).strip()
             if not text:
                 return
@@ -205,3 +247,16 @@ def _card_action_response(result) -> P2CardActionTriggerResponse:
 
 def _chunks(text: str, size: int) -> list[str]:
     return [text[index : index + size] for index in range(0, len(text), size)] or [""]
+
+
+def _attachment_details(
+    message_type: str, payload: dict[str, object]
+) -> tuple[str, str] | None:
+    if message_type == "image":
+        key = str(payload.get("image_key", "")).strip()
+        name = "image.jpg"
+    else:
+        key = str(payload.get("file_key", "")).strip()
+        fallback = "video.mp4" if message_type == "media" else "attachment.bin"
+        name = str(payload.get("file_name", fallback)).strip() or fallback
+    return (key[:500], name[:200]) if key else None

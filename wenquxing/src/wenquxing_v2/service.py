@@ -16,6 +16,7 @@ from .store import Store
 HELP_TEXT = """文曲星 v02
 
 直接发送内容：在当前会话中询问 Copilot
+发送图片、文件、视频或 ZIP：下载后交给 Copilot 分析
 会话：打开会话选择卡片
 新会话 [名称]：创建并进入会话
 进入会话 <名称>：切换会话
@@ -76,6 +77,32 @@ class ConversationService:
             source_description,
             "text",
             notice,
+        )
+
+    def accept_attachment(
+        self,
+        message_id: str,
+        owner_open_id: str,
+        chat_id: str,
+        message_type: str,
+        resource_key: str,
+        file_name: str,
+    ) -> bool:
+        if message_type == "image":
+            prompt = "请分析这张图片，提取文字、关键事实和重要细节。"
+        elif message_type == "media":
+            prompt = "请根据视频视觉关键帧概括内容、场景变化和重要信息。"
+        else:
+            prompt = f"请分析附件“{file_name}”，概括内容并列出重要信息。"
+        return self.store.accept_attachment(
+            message_id,
+            owner_open_id,
+            chat_id,
+            f"[{message_type} attachment] {file_name}",
+            prompt,
+            message_type,
+            resource_key,
+            file_name,
         )
 
     def card_action(

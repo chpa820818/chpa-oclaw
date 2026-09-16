@@ -134,6 +134,9 @@ $configLines = @(
     "WX_COPILOT_CLI=$copilot",
     'WX_COPILOT_TIMEOUT_SECONDS=180',
     'WX_V2_WORKER_COUNT=4',
+    'WX_ATTACHMENT_MAX_MB=50',
+    'WX_ATTACHMENT_EXTRACT_MAX_MB=100',
+    'WX_ATTACHMENT_ARCHIVE_MAX_FILES=12',
     'WX_V2_LOG_LEVEL=INFO'
 )
 [IO.File]::WriteAllLines($configPath, $configLines, [Text.UTF8Encoding]::new($false))

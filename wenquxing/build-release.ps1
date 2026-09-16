@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version = '0.2.2')
+param([string]$Version = '0.3.0')
 
 $ErrorActionPreference = 'Stop'
 $stage = Join-Path $env:TEMP "Wenquxing-v$Version-windows"

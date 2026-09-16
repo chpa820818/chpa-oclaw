@@ -5,6 +5,7 @@ import logging.handlers
 import msvcrt
 from pathlib import Path
 
+from .attachments import AttachmentProcessor
 from .config import Settings
 from .copilot import CopilotRunner
 from .feishu import FeishuGateway
@@ -70,7 +71,19 @@ def run(settings: Settings) -> None:
     )
     service = ConversationService(store, copilot)
     gateway = FeishuGateway(settings, service)
-    worker = JobWorker(store, copilot, gateway, settings.worker_count)
+    attachment_processor = AttachmentProcessor(
+        settings.attachment_dir,
+        settings.attachment_max_bytes,
+        settings.attachment_extract_max_bytes,
+        settings.attachment_archive_max_files,
+    )
+    worker = JobWorker(
+        store,
+        copilot,
+        gateway,
+        settings.worker_count,
+        attachment_processor,
+    )
     worker.start()
     try:
         gateway.start()

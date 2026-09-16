@@ -22,6 +22,9 @@ class Settings:
     copilot_timeout_seconds: int = 180
     worker_count: int = 4
     log_level: str = "INFO"
+    attachment_max_bytes: int = 50 * 1024 * 1024
+    attachment_extract_max_bytes: int = 100 * 1024 * 1024
+    attachment_archive_max_files: int = 12
 
     @property
     def database_path(self) -> Path:
@@ -38,6 +41,10 @@ class Settings:
     @property
     def lock_path(self) -> Path:
         return self.data_dir / "wenquxing-v02.lock"
+
+    @property
+    def attachment_dir(self) -> Path:
+        return self.data_dir / "sessions"
 
 
 def load_settings() -> Settings:
@@ -62,6 +69,9 @@ def load_settings() -> Settings:
 
     timeout = _positive_int("WX_COPILOT_TIMEOUT_SECONDS", 180)
     workers = _positive_int("WX_V2_WORKER_COUNT", 4)
+    attachment_max_mb = _positive_int("WX_ATTACHMENT_MAX_MB", 50)
+    extract_max_mb = _positive_int("WX_ATTACHMENT_EXTRACT_MAX_MB", 100)
+    archive_max_files = _positive_int("WX_ATTACHMENT_ARCHIVE_MAX_FILES", 12)
     data_dir = Path(required["WX_V2_DATA_DIR"]).expanduser().resolve()
     copilot_cli = Path(required["WX_COPILOT_CLI"]).expanduser().resolve()
     if not copilot_cli.is_file():
@@ -78,6 +88,9 @@ def load_settings() -> Settings:
         copilot_timeout_seconds=timeout,
         worker_count=min(workers, 8),
         log_level=os.environ.get("WX_V2_LOG_LEVEL", "INFO").upper(),
+        attachment_max_bytes=attachment_max_mb * 1024 * 1024,
+        attachment_extract_max_bytes=extract_max_mb * 1024 * 1024,
+        attachment_archive_max_files=min(archive_max_files, 50),
     )
 
 

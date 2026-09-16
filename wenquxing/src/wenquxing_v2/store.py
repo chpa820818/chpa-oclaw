@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -32,6 +33,11 @@ class Job:
     response_type: str
     response_content: str | None
     attempts: int
+    attachment_type: str | None
+    attachment_key: str | None
+    attachment_name: str | None
+    attachment_path: str | None
+    attachment_size: int | None
 
 
 class Store:
@@ -95,6 +101,11 @@ class Store:
                     attempts INTEGER NOT NULL DEFAULT 0,
                     next_attempt_at TEXT NOT NULL,
                     last_error TEXT,
+                    attachment_type TEXT,
+                    attachment_key TEXT,
+                    attachment_name TEXT,
+                    attachment_path TEXT,
+                    attachment_size INTEGER,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -122,10 +133,27 @@ class Store:
                     WHERE name = '默认会话' OR name GLOB '会话 [0-9]*'
                     """
                 )
+            job_columns = {
+                row["name"] for row in db.execute("PRAGMA table_info(jobs)")
+            }
+            for name, sql_type in (
+                ("attachment_type", "TEXT"),
+                ("attachment_key", "TEXT"),
+                ("attachment_name", "TEXT"),
+                ("attachment_path", "TEXT"),
+                ("attachment_size", "INTEGER"),
+            ):
+                if name not in job_columns:
+                    db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
             db.execute(
                 "UPDATE jobs SET status = 'pending', updated_at = ? WHERE status = 'running'",
                 (utc_now(),),
             )
+            public_ids = [
+                row["public_id"] for row in db.execute("SELECT public_id FROM sessions")
+            ]
+        for public_id in public_ids:
+            self._ensure_session_directory(public_id)
 
     def accept_prompt(
         self, message_id: str, owner_open_id: str, chat_id: str, body: str
@@ -184,6 +212,84 @@ class Store:
                 ),
             )
         return True
+
+    def accept_attachment(
+        self,
+        message_id: str,
+        owner_open_id: str,
+        chat_id: str,
+        body: str,
+        prompt: str,
+        attachment_type: str,
+        attachment_key: str,
+        attachment_name: str,
+    ) -> bool:
+        now = utc_now()
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute(
+                "SELECT 1 FROM inbox_messages WHERE message_id = ?", (message_id,)
+            ).fetchone():
+                return False
+            session = self._get_or_create_current(db, owner_open_id, chat_id)
+            pending = db.execute(
+                "SELECT auto_name_pending FROM sessions WHERE id = ?",
+                (session.id,),
+            ).fetchone()["auto_name_pending"]
+            if pending:
+                generated_name = self._unique_name(
+                    db, owner_open_id, chat_id, self._name_from_prompt(attachment_name)
+                )
+                db.execute(
+                    """
+                    UPDATE sessions
+                    SET name = ?, auto_name_pending = 0, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (generated_name, now, session.id),
+                )
+            db.execute(
+                """
+                INSERT INTO inbox_messages
+                    (message_id, owner_open_id, chat_id, body, received_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (message_id, owner_open_id, chat_id, body, now),
+            )
+            db.execute(
+                """
+                INSERT INTO jobs
+                    (message_id, owner_open_id, chat_id, session_id, prompt,
+                     attachment_type, attachment_key, attachment_name,
+                     next_attempt_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message_id,
+                    owner_open_id,
+                    chat_id,
+                    session.id,
+                    prompt,
+                    attachment_type,
+                    attachment_key,
+                    attachment_name,
+                    now,
+                    now,
+                    now,
+                ),
+            )
+        return True
+
+    def save_attachment(self, job_id: int, path: Path, size: int) -> None:
+        with self.connect() as db:
+            db.execute(
+                """
+                UPDATE jobs
+                SET attachment_path = ?, attachment_size = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (str(path), size, utc_now(), job_id),
+            )
 
     def accept_local_response(
         self,
@@ -307,6 +413,7 @@ class Store:
             row = db.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
             ).fetchone()
+        self._ensure_session_directory(row["public_id"])
         return self._session(row)
 
     def switch_session(
@@ -437,6 +544,9 @@ class Store:
             db.execute("DELETE FROM sessions WHERE id = ?", (target["id"],))
             if was_current:
                 self._ensure_active_current(db, owner_open_id, chat_id)
+        session_directory = self.path.parent / "sessions" / target["public_id"]
+        if session_directory.is_dir():
+            shutil.rmtree(session_directory)
         return self._session(target)
 
     def rename_current(
@@ -663,6 +773,7 @@ class Store:
                 "SELECT * FROM sessions WHERE id = ?", (cursor.lastrowid,)
             ).fetchone()
         self._set_current(db, owner_open_id, chat_id, row["id"], utc_now())
+        self._ensure_session_directory(row["public_id"])
         return self._session(row)
 
     @staticmethod
@@ -776,4 +887,12 @@ class Store:
             response_type=row["response_type"],
             response_content=row["response_content"],
             attempts=row["attempts"] + 1,
+            attachment_type=row["attachment_type"],
+            attachment_key=row["attachment_key"],
+            attachment_name=row["attachment_name"],
+            attachment_path=row["attachment_path"],
+            attachment_size=row["attachment_size"],
         )
+
+    def _ensure_session_directory(self, public_id: str) -> None:
+        (self.path.parent / "sessions" / public_id).mkdir(parents=True, exist_ok=True)
