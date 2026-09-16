@@ -1,0 +1,81 @@
+<div align="center">
+  <img src="media/wenquxing-v02-poster.svg" alt="文曲星 v02 宣传海报" width="100%">
+
+  # 文曲星 v02
+
+  **把 GitHub Copilot CLI 装进飞书，给每个话题一段独立、可恢复的记忆。**
+
+  [![Version](https://img.shields.io/badge/version-0.2.2-6E56CF)](#)
+  [![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](#)
+  [![Python](https://img.shields.io/badge/python-3.12+-3776AB)](#)
+  [![License](https://img.shields.io/badge/license-MIT-22C55E)](LICENSE)
+</div>
+
+## 它能做什么
+
+文曲星通过飞书自建应用的 WebSocket 长连接接收本人私聊消息，使用指定的
+GitHub Copilot CLI session 处理，再把结果返回飞书。无需公网服务器或回调 URL。
+
+- **会话记忆**：每个会话对应独立 Copilot session，重启后继续上下文。
+- **卡片管理**：在飞书卡片中直接新建、命名、切换、编辑和删除会话。
+- **可恢复隐藏**：会话可从列表隐藏，消息和记忆完整保留，未来随时恢复。
+- **彻底删除**：确认后删除文曲星消息、映射和对应 Copilot 本地记忆。
+- **可靠接入**：按 `message_id` 去重，SQLite 持久化任务，同会话严格串行。
+- **最小权限**：仅允许配置的租户、本人和机器人单聊；Copilot 禁用工具与 MCP。
+
+## 一键安装
+
+### 方式一：发布包
+
+1. 下载并解压 [`dist/Wenquxing-v0.2.2-windows.zip`](dist/Wenquxing-v0.2.2-windows.zip)。
+2. 双击 `install.bat`。
+3. 按提示填写飞书 `App ID`、`App Secret`、`tenant_key` 和本人 `open_id`。
+4. 按 [飞书配置指南](docs/CONFIGURATION.md)启用长连接并发布应用。
+
+### 方式二：源码安装
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install.ps1
+```
+
+安装器会检查 Python 3.12+ 和 Copilot CLI，创建独立虚拟环境、保护凭据、执行诊断、
+配置当前用户登录自启动并启动文曲星。已有 v01/v02 飞书凭据会自动复用。
+
+## 飞书内使用
+
+发送 `会话` 打开卡片管理界面。界面不显示内部编号：
+
+1. 点击 **新建并命名会话**，输入名称并保存。
+2. 点击会话名称切换上下文。
+3. 点击 **管理**，可改名、隐藏或永久删除。
+4. 在 **已隐藏会话** 中恢复，或确认后永久删除。
+
+文字命令 `新会话 名称`、`进入会话 名称`、`命名会话 名称`、`当前会话`、
+`清除上下文` 作为兼容回退。
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [安装与飞书配置](docs/CONFIGURATION.md) | 从创建应用到长连接上线的完整步骤 |
+| [架构与安全](docs/ARCHITECTURE.md) | 数据流、会话模型、权限边界与删除语义 |
+| [运维与排障](docs/OPERATIONS.md) | 日志、诊断、升级、备份及常见错误码 |
+
+## 项目结构
+
+```text
+wenquxing-v02/
+├─ install.bat / install.ps1   # 一键安装
+├─ uninstall.ps1               # 可选保留数据的卸载
+├─ src/wenquxing_v2/           # 应用源码
+├─ tests/                      # 会话、删除和安全测试
+├─ docs/                       # 部署及运维文档
+├─ media/                      # 宣传素材
+└─ dist/                       # 可分发 ZIP
+```
+
+## 安全提示
+
+不要把 `.env`、App Secret、SQLite 数据库或 `%USERPROFILE%\.copilot` 上传到 GitHub。
+Copilot CLI 会接触用户发给机器人的文本；使用前请确认组织政策、账号权限和数据处理要求。
