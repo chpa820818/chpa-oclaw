@@ -87,13 +87,15 @@ class ConversationService:
         message_type: str,
         resource_key: str,
         file_name: str,
+        prompt: str | None = None,
     ) -> bool:
-        if message_type == "image":
-            prompt = "请分析这张图片，提取文字、关键事实和重要细节。"
-        elif message_type == "media":
-            prompt = "请根据视频视觉关键帧概括内容、场景变化和重要信息。"
-        else:
-            prompt = f"请分析附件“{file_name}”，概括内容并列出重要信息。"
+        if prompt is None:
+            if message_type == "image":
+                prompt = "请分析这张图片，提取文字、关键事实和重要细节。"
+            elif message_type == "media":
+                prompt = "请根据视频视觉关键帧概括内容、场景变化和重要信息。"
+            else:
+                prompt = f"请分析附件“{file_name}”，概括内容并列出重要信息。"
         return self.store.accept_attachment(
             message_id,
             owner_open_id,

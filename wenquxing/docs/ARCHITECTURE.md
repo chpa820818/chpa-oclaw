@@ -6,7 +6,7 @@
 飞书本人单聊
     │  WebSocket: im.message.receive_v1 / card.action.trigger
     ▼
-接入处理器 ── 身份校验 ── message_id 去重 ── SQLite 持久化
+接入处理器 ── 身份校验 ── text/post/附件解析 ── message_id 去重 ── SQLite 持久化
     │
     ▼
 后台任务调度器 ── 下载到当前会话目录 ── 类型/大小校验
@@ -66,3 +66,7 @@ SQLite 保存用户可见名称、内部标识、Copilot session UUID、当前�
 飞书接收按 `message_id` 唯一约束去重。任务在 SQLite 中持久化，进程重启会恢复运行中的任务。
 回复使用基于消息 ID 的稳定 UUID，降低平台重试导致的重复。跨飞书与本机数据库无法提供严格的
 分布式“恰好一次”，目标是持久化恢复和尽量减少重复。
+
+飞书把“文字与文件一起发送”编码为 `post` 富文本，而不是普通 `text` 或 `file`。接入层会
+提取其中的文字指令和首个图片、视频或文件资源，将二者作为同一任务交给 Copilot，避免误报
+“仅支持文本消息”。

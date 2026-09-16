@@ -250,13 +250,43 @@ class FeishuGateway:
                     file_name,
                 )
                 return
+            if message.message_type == "post":
+                text, attachment = _post_message_details(payload)
+                if attachment is not None:
+                    attachment_type, resource_key, file_name = attachment
+                    prompt = text or (
+                        f"请分析附件“{file_name}”，概括内容并列出重要信息。"
+                    )
+                    self.service.accept_attachment(
+                        message.message_id,
+                        open_id,
+                        message.chat_id,
+                        attachment_type,
+                        resource_key,
+                        file_name,
+                        prompt,
+                    )
+                    return
+                if text:
+                    self.service.accept_message(
+                        message.message_id, open_id, message.chat_id, text
+                    )
+                    return
+                self.service.accept_notice(
+                    message.message_id,
+                    open_id,
+                    message.chat_id,
+                    "[post message]",
+                    "未能识别这条富文本消息中的文字或附件。",
+                )
+                return
             if message.message_type != "text":
                 self.service.accept_notice(
                     message.message_id,
                     open_id,
                     message.chat_id,
                     f"[{message.message_type or 'unknown'} message]",
-                    "当前版本仅支持文本消息。",
+                    f"暂不支持 {message.message_type or 'unknown'} 类型的消息。",
                 )
                 return
             text = str(payload.get("text", "")).strip()
@@ -326,3 +356,72 @@ def _attachment_details(
         fallback = "video.mp4" if message_type == "media" else "attachment.bin"
         name = str(payload.get("file_name", fallback)).strip() or fallback
     return (key[:500], name[:200]) if key else None
+
+
+def _post_message_details(
+    payload: dict[str, object],
+) -> tuple[str, tuple[str, str, str] | None]:
+    title = str(payload.get("title", "")).strip()
+    blocks = payload.get("content")
+    if not isinstance(blocks, list):
+        post = payload.get("post")
+        if isinstance(post, dict):
+            locale = next(
+                (value for value in post.values() if isinstance(value, dict)),
+                None,
+            )
+            if locale is not None:
+                title = str(locale.get("title", title)).strip()
+                blocks = locale.get("content")
+    if not isinstance(blocks, list):
+        return title, None
+
+    text_parts = [title] if title else []
+    attachment: tuple[str, str, str] | None = None
+    for block in blocks:
+        if not isinstance(block, list):
+            continue
+        line_parts: list[str] = []
+        for element in block:
+            if not isinstance(element, dict):
+                continue
+            tag = str(element.get("tag", "")).lower()
+            if tag in {"text", "a"}:
+                value = str(element.get("text", "")).strip()
+                if value:
+                    line_parts.append(value)
+            elif tag == "at":
+                value = str(
+                    element.get("user_name") or element.get("text") or ""
+                ).strip()
+                if value:
+                    line_parts.append(f"@{value.lstrip('@')}")
+            if attachment is None and tag in {"file", "media", "img", "image"}:
+                attachment_type = (
+                    "image"
+                    if tag in {"img", "image"}
+                    else "media"
+                    if tag == "media"
+                    else "file"
+                )
+                key_name = "image_key" if attachment_type == "image" else "file_key"
+                resource_key = str(element.get(key_name, "")).strip()
+                fallback = (
+                    "image.jpg"
+                    if attachment_type == "image"
+                    else "video.mp4"
+                    if attachment_type == "media"
+                    else "attachment.bin"
+                )
+                file_name = (
+                    str(element.get("file_name", fallback)).strip() or fallback
+                )
+                if resource_key:
+                    attachment = (
+                        attachment_type,
+                        resource_key[:500],
+                        file_name[:200],
+                    )
+        if line_parts:
+            text_parts.append("".join(line_parts))
+    return "\n".join(text_parts).strip(), attachment

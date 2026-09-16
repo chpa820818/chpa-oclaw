@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wenquxing-v02"
-version = "0.4.0"
+version = "0.4.1"
 description = "Feishu to GitHub Copilot CLI session bridge"
 requires-python = ">=3.12"
 dependencies = [
