@@ -40,12 +40,10 @@
           stroke="#72dfff" stroke-opacity="0.4"/>
     <circle cx="27" cy="24" r="7" fill="#4de7bb" filter="url(#glow)"/>
     <text x="47" y="31" fill="#dceaff" font-family="Segoe UI, Microsoft YaHei, sans-serif"
-          font-size="19" font-weight="600">WENQUXING 02</text>
+          font-size="19" font-weight="600">WENQUXING</text>
 
     <text x="0" y="160" fill="#fff" font-family="Segoe UI, Microsoft YaHei, sans-serif"
           font-size="88" font-weight="800" letter-spacing="2">文曲星</text>
-    <text x="330" y="160" fill="url(#brand)" font-family="Segoe UI, sans-serif"
-          font-size="88" font-weight="800">v02</text>
     <text x="2" y="220" fill="#c7d4f2" font-family="Segoe UI, Microsoft YaHei, sans-serif"
           font-size="31" font-weight="400">把 Copilot CLI 装进飞书</text>
     <text x="2" y="265" fill="#8190b5" font-family="Segoe UI, Microsoft YaHei, sans-serif"

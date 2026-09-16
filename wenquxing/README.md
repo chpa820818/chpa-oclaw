@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="media/wenquxing-v02-poster.svg" alt="文曲星 v02 宣传海报" width="100%">
+  <img src="media/wenquxing-poster.svg" alt="Wenquxing 宣传海报" width="100%">
 
-  # 文曲星 v02
+  # Wenquxing
 
   **把 GitHub Copilot CLI 装进飞书，给每个话题一段独立、可恢复的记忆。**
 
@@ -22,6 +22,14 @@ GitHub Copilot CLI session 处理，再把结果返回飞书。无需公网服�
 - **彻底删除**：确认后删除文曲星消息、映射和对应 Copilot 本地记忆。
 - **可靠接入**：按 `message_id` 去重，SQLite 持久化任务，同会话严格串行。
 - **最小权限**：仅允许配置的租户、本人和机器人单聊；Copilot 禁用工具与 MCP。
+
+## 应用界面
+
+<div align="center">
+  <img src="media/wenquxing-app-screenshot.png" alt="Wenquxing 飞书会话管理界面" width="560">
+  <br>
+  <sub>飞书会话管理卡片，展示内容为脱敏示意数据。</sub>
+</div>
 
 ## 一键安装
 
@@ -65,7 +73,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ## 项目结构
 
 ```text
-wenquxing-v02/
+wenquxing/
 ├─ install.bat / install.ps1   # 一键安装
 ├─ uninstall.ps1               # 可选保留数据的卸载
 ├─ src/wenquxing_v2/           # 应用源码
