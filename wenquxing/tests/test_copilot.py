@@ -78,7 +78,7 @@ def test_ask_passes_only_explicit_attachments(
     assert "--attachment" in captured
     assert str(attachment.resolve()) in captured
     assert "--allow-tool=write" in captured
-    assert "--deny-tool=shell" in captured
+    assert "--allow-tool=shell(wenquxing-file:*)" in captured
     assert "--deny-url=*" in captured
     assert not any(item.startswith("--available-tools") for item in captured)
     assert "--allow-all-paths" not in captured

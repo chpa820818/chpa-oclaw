@@ -13,10 +13,11 @@
     │
     ▼
 Copilot CLI -C <全部会话根目录> --session-id=<专属 UUID>
-            └─ 文件增删改查 + 原生 attachment
+            ├─ 文件增删改查 + 原生 attachment
+            └─ 受限 wenquxing-file 图片处理
     │
     ▼
-飞书回复 API
+飞书文字回复 + 图片/文件上传与发送 API
 ```
 
 ## 会话模型
@@ -51,8 +52,10 @@ SQLite 保存用户可见名称、内部标识、Copilot session UUID、当前�
 - Copilot 对 `%LOCALAPPDATA%\Wenquxing\v02\sessions` 及其子目录拥有完整文件增删改查
   权限，但不开放 `--allow-all-paths`，根目录外访问会被拒绝。
 - 文件写入使用 Copilot 的受控 `write` 权限；Shell、网络、MCP、远程控制及飞书凭据继续
-  禁用。
+  禁用。唯一允许的命令是受限的 `wenquxing-file`，其输入输出路径均强制限制在会话根目录。
 - 图片和原生文档可显式附加；文本和代码由 Copilot 文件工具自行读取或修改。
+- 用户明确要求“发给我”时，最终文件写入该任务独立的 `outbox\job-<id>`；Worker 最多
+  回传 5 个、单个不超过 30 MB 的普通文件。图片走飞书图片消息，其他类型走文件消息。
 - 视频仅通过受限 FFmpeg 进程生成视觉帧；ZIP 只做安全展开，不执行内容，并防护路径穿越
   和压缩炸弹；实际理解和回答仍由 Copilot 完成。
 - Copilot 仍会接触用户消息文本；它不是本地离线模型。

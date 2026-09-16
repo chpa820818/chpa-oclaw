@@ -11,6 +11,7 @@ from wenquxing_v2.worker import JobWorker
 class FakeGateway:
     def __init__(self) -> None:
         self.replies: list[str] = []
+        self.files: list[Path] = []
 
     def download_resource(
         self, message_id: str, resource_key: str, resource_type: str
@@ -26,6 +27,9 @@ class FakeGateway:
         self, message_id: str, chat_id: str, message_type: str, content: str
     ) -> None:
         self.replies.append(content)
+
+    def send_file(self, chat_id: str, path: Path, logical_key: str) -> None:
+        self.files.append(path)
 
 
 class FakeCopilot:
@@ -47,6 +51,23 @@ class FakeCopilot:
         assert "files" in prompt
         assert attachments == ()
         return "analysis complete"
+
+
+class FileCreatingCopilot(FakeCopilot):
+    def ask(
+        self,
+        session_id: str,
+        prompt: str,
+        attachments=(),
+        work_dir: Path | None = None,
+    ) -> str:
+        assert work_dir is not None
+        marker = "\\outbox\\job-" if "\\" in prompt else "/outbox/job-"
+        relative = prompt.split(marker, 1)[1].split("；", 1)[0]
+        output = work_dir / "outbox" / f"job-{relative}" / "result.txt"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("result", encoding="utf-8")
+        return "已生成并发送文件"
 
 
 def test_worker_saves_file_in_current_session_workspace(tmp_path: Path) -> None:
@@ -75,3 +96,26 @@ def test_worker_saves_file_in_current_session_workspace(tmp_path: Path) -> None:
     assert copilot.work_dir == tmp_path / "sessions" / session.public_id
     assert gateway.replies == ["analysis complete"]
     assert store.status_counts() == {"done": 1}
+
+
+def test_worker_returns_created_file_when_user_requests_it(tmp_path: Path) -> None:
+    store = Store(tmp_path / "wenquxing.sqlite3")
+    store.initialize()
+    service = ConversationService(store)
+    service.accept_message("m-output", "owner", "chat", "生成结果文件，然后发给我")
+    job = store.claim_jobs(1)[0]
+    gateway = FakeGateway()
+    processor = AttachmentProcessor(
+        tmp_path / "sessions",
+        max_bytes=1024 * 1024,
+        max_extract_bytes=2 * 1024 * 1024,
+        max_archive_files=12,
+    )
+    worker = JobWorker(  # type: ignore[arg-type]
+        store, FileCreatingCopilot(), gateway, 1, processor
+    )
+
+    worker._process(job)
+
+    assert gateway.replies == ["已生成并发送文件"]
+    assert [path.name for path in gateway.files] == ["result.txt"]

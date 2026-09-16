@@ -3,9 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from pathlib import Path
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
+    CreateFileRequest,
+    CreateFileRequestBody,
+    CreateImageRequest,
+    CreateImageRequestBody,
     CreateMessageRequest,
     CreateMessageRequestBody,
     GetMessageResourceRequest,
@@ -144,6 +149,67 @@ class FeishuGateway:
                 f"log_id={response.get_log_id()}"
             )
         return response.file.read(), response.file_name
+
+    def send_file(self, chat_id: str, path: Path, logical_key: str) -> None:
+        suffix = path.suffix.lower()
+        if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+            with path.open("rb") as stream:
+                upload = self.client.im.v1.image.create(
+                    CreateImageRequest.builder()
+                    .request_body(
+                        CreateImageRequestBody.builder()
+                        .image_type("message")
+                        .image(stream)
+                        .build()
+                    )
+                    .build()
+                )
+            if not upload.success() or upload.data is None:
+                raise FeishuError(
+                    f"飞书图片上传失败 code={upload.code}, msg={upload.msg}, "
+                    f"log_id={upload.get_log_id()}"
+                )
+            message_type = "image"
+            content = {"image_key": upload.data.image_key}
+        else:
+            with path.open("rb") as stream:
+                upload = self.client.im.v1.file.create(
+                    CreateFileRequest.builder()
+                    .request_body(
+                        CreateFileRequestBody.builder()
+                        .file_type("stream")
+                        .file_name(path.name)
+                        .file(stream)
+                        .build()
+                    )
+                    .build()
+                )
+            if not upload.success() or upload.data is None:
+                raise FeishuError(
+                    f"飞书文件上传失败 code={upload.code}, msg={upload.msg}, "
+                    f"log_id={upload.get_log_id()}"
+                )
+            message_type = "file"
+            content = {"file_key": upload.data.file_key}
+        request = (
+            CreateMessageRequest.builder()
+            .receive_id_type("chat_id")
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(chat_id)
+                .msg_type(message_type)
+                .content(json.dumps(content))
+                .uuid(str(uuid.uuid5(uuid.NAMESPACE_URL, logical_key)))
+                .build()
+            )
+            .build()
+        )
+        response = self.client.im.v1.message.create(request)
+        if not response.success():
+            raise FeishuError(
+                f"飞书文件发送失败 code={response.code}, msg={response.msg}, "
+                f"log_id={response.get_log_id()}"
+            )
 
     def _on_message(self, data: P2ImMessageReceiveV1) -> None:
         try:

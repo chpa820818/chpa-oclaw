@@ -5,7 +5,7 @@
 
   **把 GitHub Copilot CLI 装进飞书，给每个话题一段独立、可恢复的记忆。**
 
-  [![Version](https://img.shields.io/badge/version-0.3.0-6E56CF)](#)
+  [![Version](https://img.shields.io/badge/version-0.4.0-6E56CF)](#)
   [![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](#)
   [![Python](https://img.shields.io/badge/python-3.12+-3776AB)](#)
   [![License](https://img.shields.io/badge/license-MIT-22C55E)](LICENSE)
@@ -23,7 +23,9 @@ GitHub Copilot CLI session 处理，再把结果返回飞书。无需公网服�
 - **可靠接入**：按 `message_id` 去重，SQLite 持久化任务，文件操作全局串行。
 - **会话文件夹**：每个会话拥有独立本地目录，文件与对话记忆一起隔离和保留。
 - **多文件分析**：Copilot 自行读取图片、Office/PDF、文本与代码，并分析视频关键帧和 ZIP。
-- **最小权限**：仅允许配置的租户、本人和机器人单聊；Copilot 禁用工具与 MCP。
+- **文件回传**：生成或修改后的图片、文档和压缩包可自动上传并发送回当前飞书单聊。
+- **安全图片编辑**：内置受限图片加字工具，无需向 Copilot 开放任意 Shell。
+- **最小权限**：仅允许配置的租户、本人和机器人单聊；Copilot 禁用网络与 MCP。
 
 ## 应用界面
 
@@ -37,7 +39,7 @@ GitHub Copilot CLI session 处理，再把结果返回飞书。无需公网服�
 
 ### 方式一：发布包
 
-1. 下载并解压 [`dist/Wenquxing-v0.3.0-windows.zip`](dist/Wenquxing-v0.3.0-windows.zip)。
+1. 下载并解压 [`dist/Wenquxing-v0.4.0-windows.zip`](dist/Wenquxing-v0.4.0-windows.zip)。
 2. 双击 `install.bat`。
 3. 按提示填写飞书 `App ID`、`App Secret`、`tenant_key` 和本人 `open_id`。
 4. 按 [飞书配置指南](docs/CONFIGURATION.md)启用长连接并发布应用。
@@ -67,7 +69,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 直接向机器人发送附件即可保存到当前会话的专属目录。Copilot CLI 以全部文曲星会话目录
 为受管工作区，可跨会话读取、创建、修改、移动和删除文件；图片和 Office/PDF 同时使用
 原生附件能力。视频会生成视觉关键帧，ZIP 经安全解压后由 Copilot 逐项分析。权限不会扩展
-到文曲星会话根目录之外，Shell 与网络保持禁用。
+到文曲星会话根目录之外，网络保持禁用。发送“在图片上增加 Hello Vic！然后发给我”等
+指令时，Copilot 会调用受限图片工具生成新文件，文曲星再上传并发送到当前飞书单聊。
 
 ## 文档
 
